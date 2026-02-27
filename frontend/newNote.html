@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+                                    <meta charset="UTF-8">
+                                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                    <title>Document</title>
+                                    <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+                                    <link rel="stylesheet" href="styles.css">
+
+</head>
+<body class="newnote">
+                                    <div class="editor-wrapper">
+
+                                                                        <!-- SHARE BUTTON -->
+                                                                        <button class="share-btn">Share</button>
+                                                                    
+                                                                        <!-- SHARE MENU -->
+                                                                        <div class="share-menu" id="shareMenu">
+                                                                          <h4>Share with someone</h4>
+                                                                          <input type="text" placeholder="Search username..." class="share-search">
+                                                                    
+                                                                          <div class="search-results">
+                                                                            <div class="user-result">JohnDoe</div>
+                                                                            <div class="user-result">Sarah21</div>
+                                                                          </div>
+                                                                    
+                                                                          <button class="send-share">Send your Note</button>
+                                                                        </div>
+                                                                    
+                                                                        <!-- VISIBILITY TOGGLE -->
+                                                                        <div class="visibility-toggle">
+                                                                          <button type="button" class="toggle-btn active" data-value="public">
+                                                                            Public
+                                                                          </button>
+                                                                          <button type="button" class="toggle-btn" data-value="private">
+                                                                            Private
+                                                                          </button>
+                                                                        </div>
+                                                                    
+                                                                        <!-- TITLE -->
+                                                                        <h2>Write your note</h2>
+                                                                    
+                                                                        <!-- EDITOR -->
+                                                                        <textarea id="editor"></textarea>
+                                                                    
+                                                                        <!-- BOTTOM BUTTONS -->
+                                                                        <div class="bottom-actions">
+                                                                          <button class="save-btn">Save</button>
+                                                                          <button class="exit-btn">Exit</button>
+                                                                        </div>
+                                                                    
+                                                                      </div>
+    
+   
+    </div>
+   
+
+   <script>
+      ClassicEditor
+      .create(document.querySelector('#editor'))
+      .catch(error => {
+        console.error(error);
+      });
+      const shareBtn = document.querySelector(".share-btn");
+const shareMenu = document.getElementById("shareMenu");
+
+shareBtn.addEventListener("click", () => {
+    shareMenu.style.display =
+        shareMenu.style.display === "block" ? "none" : "block";
+});
+      const buttons = document.querySelectorAll(".toggle-btn");
+
+buttons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    buttons.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  });
+});
+   </script>
+                                
+</body>
+</html>
