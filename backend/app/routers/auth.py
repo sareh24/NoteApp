@@ -17,8 +17,10 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     
     # Create new user (plaintext password for now)
     new_user = models.User(
+        firstName=user.firstName,
+        lastName=user.lastName,
         email=user.email,
-        password=user.password  # Storing plaintext - will hash later
+        password_hash=user.password  # Storing plaintext - will hash later
     )
     db.add(new_user)
     db.commit()
@@ -36,7 +38,7 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
         )
     
     # Check password (plaintext comparison for now)
-    if user.password != login_data.password:
+    if user.password_hash != login_data.password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password"
