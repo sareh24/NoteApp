@@ -42,13 +42,13 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     # We encrypt the master key with that derived key on the frontend
     # For now, we'll do it here: derive the encryption key from password
     from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.backends import default_backend
     import nacl.secret
     import nacl.utils
 
     # Derive key encryption key from password using PBKDF2
-    kdf = PBKDF2(
+    kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=key_encryption_salt,
@@ -112,7 +112,7 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     # Decrypt master key
     from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.backends import default_backend
     import nacl.secret
 
@@ -121,7 +121,7 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
     encrypted_master_key_bytes = base64.b64decode(user.encrypted_master_key)
 
     # Derive key encryption key from password + salt (same as during signup)
-    kdf = PBKDF2(
+    kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=key_encryption_salt,
