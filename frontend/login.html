@@ -21,6 +21,35 @@
                                                                           </div>
                                                                         
                                                                           <button type="submit" class="subbutton">Submit</button>
-                                                                      </form>                               
+                                                                      </form>
+    <script>
+        const submit = document.querySelector('.subbutton')
+        submit.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('exampleInputEmail1').value.trim();
+            const password = document.getElementById('exampleInputPassword1').value;
+
+            if (!email || !password) {
+                alert('Please enter your email and password.');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    window.location.href = 'library.html';
+                } else {
+                    alert('Login failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Could not connect to the server. Make sure the backend is running.');
+            }
+        });
+    </script>
 </body>
 </html>
