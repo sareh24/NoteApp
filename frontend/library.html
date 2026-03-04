@@ -1,57 +1,170 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-                                    <meta charset="UTF-8">
-                                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                    <title>Document</title>
-                                    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Notes</title>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body class="library">
-           
-           <h2>Your notes</h2>
-           <button class="add-btn">+</button>
-         
-           <div class="notes-container">
-         
-             <div class="note-card">
-               <img src="https://picsum.photos/seed/picsum/200/200" alt="Note preview">
-               <span class="badge private">Private</span>
-         
-               <div class="note-content">
-                 <h4>Note Title</h4>
-                 <p>
-                   Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                   Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                 </p>
-               </div>
-         
-             </div>
-         
-           </div>
-           <div class="notes-container">
-         
-             <div class="note-card">
-               <img src="https://picsum.photos/200/200" alt="Note preview">
-                <span class="badge public">Public</span>
-                                
-               <div class="note-content">
-                 <h4>Note Title</h4>
-                  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                    Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                  </p>
-                </div>
-                                
-               </div>
-                                
-           </div>
+    <h2>Your notes</h2>
+    <button class="add-btn">+</button>
 
+    <div class="notes-container" id="notesContainer">
+        <!-- Notes will be loaded here dynamically -->
+    </div>
 
-           <script>
-               const add = document.querySelector(".add-btn")
-               add.addEventListener("click", () => {
-               window.location.href = "newNote.html";
-            });
-           </script>
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        // Retrieve master key from sessionStorage
+        function getMasterKey() {
+            // Retrieve base64 master key from sessionStorage
+            const masterKeyB64 = sessionStorage.getItem('masterKey');
+            if (!masterKeyB64) {
+                throw new Error('Master key not found. Please log in again.');
+            }
+            // Decode from base64 to Uint8Array
+            const binaryString = atob(masterKeyB64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        // Decrypt function using stored master key (NO PASSWORD NEEDED!)
+        async function decryptNote(ciphertext) {
+            try {
+                const combined = nacl.util.decodeBase64(ciphertext);
+                const nonce = combined.slice(0, 24);
+                const encryptedData = combined.slice(24);
+
+                const key = getMasterKey();  // Use stored master key directly
+                const plaintext = nacl.secretbox.open(encryptedData, nonce, key);
+
+                if (!plaintext) {
+                    throw new Error('Decryption failed - corrupted data');
+                }
+
+                return new TextDecoder().decode(plaintext);
+            } catch (error) {
+                console.error('Decryption error:', error);
+                throw new Error('Failed to decrypt note: ' + error.message);
+            }
+        }
+
+        // Extract plain text preview from HTML
+        function getTextPreview(htmlContent, maxLength = 150) {
+            const temp = document.createElement('div');
+            temp.innerHTML = htmlContent;
+            const text = temp.textContent || temp.innerText || '';
+            return text.substring(0, maxLength) + (text.length > maxLength ? '...' : '');
+        }
+
+        // Load and display notes
+        async function loadNotes() {
+            const userId = localStorage.getItem('userId');
+            const notesContainer = document.getElementById('notesContainer');
+
+            if (!userId) {
+                notesContainer.innerHTML = '<p>Please log in to view your notes</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/notes/`, {
+                    headers: {
+                        'user-id': userId
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch notes');
+                }
+
+                const notes = await response.json();
+
+                if (notes.length === 0) {
+                    notesContainer.innerHTML = '<p>No notes yet. Create one by clicking the + button!</p>';
+                    return;
+                }
+
+                notesContainer.innerHTML = '';
+
+                for (const note of notes) {
+                    try {
+                        // Decrypt the content using stored master key (NO PASSWORD PROMPT!)
+                        const decryptedContent = await decryptNote(note.content_ciphertext);
+                        const preview = getTextPreview(decryptedContent);
+
+                        // Create note card
+                        const noteCard = document.createElement('div');
+                        noteCard.className = 'note-card';
+                        noteCard.style.cursor = 'pointer';
+                        noteCard.innerHTML = `
+                            <img src="https://picsum.photos/seed/${note.id}/200/200" alt="Note preview">
+                            <span class="badge ${note.is_public ? 'public' : 'private'}">
+                                ${note.is_public ? 'Public' : 'Private'}
+                            </span>
+                            <div class="note-content">
+                                <h4>${escapeHtml(note.title)}</h4>
+                                <p>${escapeHtml(preview)}</p>
+                            </div>
+                        `;
+
+                        // Click to edit
+                        noteCard.addEventListener('click', () => {
+                            window.location.href = `newNote.html?id=${note.id}`;
+                        });
+
+                        notesContainer.appendChild(noteCard);
+                    } catch (error) {
+                        console.error(`Failed to decrypt note ${note.id}:`, error);
+                        // Show encrypted note as unavailable
+                        const noteCard = document.createElement('div');
+                        noteCard.className = 'note-card';
+                        noteCard.innerHTML = `
+                            <img src="https://picsum.photos/seed/${note.id}/200/200" alt="Note preview">
+                            <span class="badge ${note.is_public ? 'public' : 'private'}">
+                                ${note.is_public ? 'Public' : 'Private'}
+                            </span>
+                            <div class="note-content">
+                                <h4>${escapeHtml(note.title)}</h4>
+                                <p>Failed to decrypt note - please log in again</p>
+                            </div>
+                        `;
+                        notesContainer.appendChild(noteCard);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading notes:', error);
+                notesContainer.innerHTML = `<p>Error loading notes: ${error.message}</p>`;
+            }
+        }
+
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // Add button handler
+        document.querySelector(".add-btn").addEventListener("click", () => {
+            window.location.href = "newNote.html";
+        });
+
+        // Load notes on page load
+        document.addEventListener('DOMContentLoaded', loadNotes);
+    </script>
 
 </body>
 </html>

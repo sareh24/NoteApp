@@ -1,26 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-                                    <meta charset="UTF-8">
-                                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                    <title>Document</title>
-                                    <link rel="stylesheet" href="styles.css">
-                                    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
 <body class="signup">
-                                    <form class="signform">
-                                                                      
-                                                                         <div class="mb-3">
-                                                                            <label for="exampleInputEmail1" class="form-label">Email address</label>
-                                                                            <input type="email" class="form-control" id="exampleInputEmail1" aria-describedby="emailHelp">
-                                                                        
-                                                                          </div>
-                                                                          <div class="mb-3">
-                                                                             <label for="exampleInputPassword1" class="form-label">Password</label>
-                                                                             <input type="password" class="form-control" id="exampleInputPassword1">
-                                                                          </div>
-                                                                        
-                                                                          <button type="submit" class="subbutton">Submit</button>
-                                                                      </form>                               
+    <form class="signform" id="loginForm">
+        <div class="mb-3">
+            <label for="email" class="form-label">Email address</label>
+            <input type="email" class="form-control" id="email" name="email" required>
+        </div>
+        <div class="mb-3">
+            <label for="password" class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+        <button type="submit" class="subbutton">Submit</button>
+    </form>
+
+    <script>
+        const API_URL = 'http://localhost:8000'
+
+        async function login(email, password) {
+            const response = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                console.log('Login successful:', data);
+                // Save user info for future requests
+                localStorage.setItem('userEmail', data.user.email);
+                localStorage.setItem('userId', data.user.id);
+
+                // Store master key in sessionStorage (cleared when browser closes)
+                sessionStorage.setItem('masterKey', data.master_key);
+
+                return data;
+            } else {
+                throw new Error(data.detail || 'Login failed');
+            }
+        }
+
+        // Handle form submission
+        document.querySelector('#loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.querySelector('#email').value;
+            const password = document.querySelector('#password').value;
+
+            try {
+                const result = await login(email, password);
+                console.log('Login successful, master key stored');
+                // Redirect after successful login
+                window.location.href = 'library.html';
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Login failed: ' + error.message);
+            }
+        });
+    </script>
 </body>
 </html>
