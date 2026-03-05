@@ -21,11 +21,11 @@
         <p class="mt-3">Don't have an account? <a href="signup.html">Sign up</a></p>
     </form>
     <script>
-        const form = document.getElementById('loginForm');
+        const form = document.querySelector('#loginForm');
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+            const email = document.querySelector('#email').value;
+            const password = document.querySelector('#password').value;
             
             try {
                 const response = await fetch('http://localhost:8000/auth/login', {
