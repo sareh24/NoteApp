@@ -5,6 +5,8 @@
                                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
                                     <title>Document</title>
                                     <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+                                    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+2. Update your import handler:
                                     <link rel="stylesheet" href="styles.css">
 
 </head>
@@ -46,6 +48,8 @@
                                                                         <!-- BOTTOM BUTTONS -->
                                                                         <div class="bottom-actions">
                                                                           <button class="save-btn">Save</button>
+                                                                          <button class="import-btn">Import</button>  <!-- add this -->
+                                                                         <input type="file" id="importFile" accept=".txt,.html,.md,.docx" style="display:none">
                                                                           <button class="exit-btn">Exit</button>
                                                                         </div>
                                                                     
@@ -56,6 +60,14 @@
    
 
    <script>
+    async function encryptNote(content) {
+    // TODO: replace with real AES-256-GCM encryption
+    return {
+        ciphertext: content,      // plaintext for now
+        encryptedDek: null,
+        keyVersion: "v1"
+    };
+}
       // Store editor instance globally
       let editorInstance;
       
@@ -84,7 +96,39 @@
           btn.classList.add("active");
         });
       });
-      
+      const importBtn = document.querySelector(".import-btn");
+const importFile = document.getElementById("importFile");
+
+importBtn.addEventListener("click", () => {
+    importFile.click();  // open file picker
+});
+
+importFile.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // handle .docx differently
+    if (file.name.endsWith('.docx')) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const arrayBuffer = event.target.result;
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            if (editorInstance) {
+                editorInstance.setData(result.value);
+            }
+        };
+        reader.readAsArrayBuffer(file);  // binary read, not text
+    } else {
+        // .txt and .html stay as before
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (editorInstance) {
+                editorInstance.setData(event.target.result);
+            }
+        };
+        reader.readAsText(file);
+    }
+});
       const exitbtn = document.querySelector(".exit-btn")
       exitbtn.addEventListener("click", () => {
          window.location.href = "library.html"
@@ -121,6 +165,17 @@
           tempDiv.innerHTML = content;
           const firstText = tempDiv.textContent.trim();
           const title = firstText.substring(0, 50) || "Untitled Note";
+                    let finalContent = content;
+          let encryptedDek = null;
+          let keyVersion = null;
+
+          if (!isPublic) {
+              const encrypted = await encryptNote(content);  // stub for now
+              finalContent = encrypted.ciphertext;
+              encryptedDek = encrypted.encryptedDek;
+              keyVersion = encrypted.keyVersion;
+          }
+      
 
           try {
               const response = await fetch('http://localhost:8000/notes/', {
@@ -131,8 +186,10 @@
                   },
                   body: JSON.stringify({
                       title: title,
-                      content: content,
-                      is_public: isPublic
+                      content: finalContent,       // encrypted if private
+                      is_public: isPublic,
+                      encrypted_dek: encryptedDek, // null if public
+                      key_version: keyVersion       // null if public
                   })
               });
 

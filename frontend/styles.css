@@ -313,7 +313,20 @@ background: linear-gradient(
                                   .save-btn:hover {
                                     background: #4a3f37;
                                   }
-                                  
+ .import-btn {
+    background-color: #6B6B6B;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.import-btn:hover {
+    background-color: #555555;
+}
+    
                                   /* exit button softer */
                                   .exit-btn {
                                     background: transparent;

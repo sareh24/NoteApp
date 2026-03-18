@@ -27,7 +27,9 @@ async def create_note(
         user_id=user.id,
         title=note.title,
         content=note.content,
-        is_public=note.is_public
+        is_public=note.is_public,
+        encrypted_dek=note.encrypted_dek,  # None for public notes
+        key_version=note.key_version       # None for public notes
     )
     
     db.add(new_note)
@@ -158,3 +160,8 @@ async def delete_note(
     db.commit()
     
     return None
+
+
+def encrypt_content(content: str, user_id: str) -> str:
+    # TODO: implement real encryption (AES-256-GCM + DEK/KEK scheme)
+    return content

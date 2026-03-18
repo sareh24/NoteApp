@@ -23,6 +23,8 @@ class Note(Base):
     title = Column(String, nullable=False, default="Untitled Note")
     content = Column(Text, nullable=False)
     is_public = Column(Boolean, default=False)
+    encrypted_dek = Column(Text, nullable=True)  # only set for private notes
+    key_version = Column(String, nullable=True)  # tracks which key was used, for rotation
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
