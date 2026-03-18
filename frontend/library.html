@@ -1,57 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-                                    <meta charset="UTF-8">
-                                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                    <title>Document</title>
-                                    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Notes</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="library">
+    <!-- User Profile Box -->
+    <div class="user-profile-box">
+        <div class="user-info">
+            <div class="user-avatar">
+                <span id="userInitial">U</span>
+            </div>
+            <div class="user-details">
+                <p class="user-name" id="userName">User</p>
+                <p class="user-email" id="userEmail">email@example.com</p>
+            </div>
+        </div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
            
-           <h2>Your notes</h2>
-           <button class="add-btn">+</button>
+    <h2>Your notes</h2>
+    <button class="add-btn">+</button>
          
-           <div class="notes-container">
-         
-             <div class="note-card">
-               <img src="https://picsum.photos/seed/picsum/200/200" alt="Note preview">
-               <span class="badge private">Private</span>
-         
-               <div class="note-content">
-                 <h4>Note Title</h4>
-                 <p>
-                   Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                   Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                 </p>
-               </div>
-         
-             </div>
-         
-           </div>
-           <div class="notes-container">
-         
-             <div class="note-card">
-               <img src="https://picsum.photos/200/200" alt="Note preview">
-                <span class="badge public">Public</span>
-                                
-               <div class="note-content">
-                 <h4>Note Title</h4>
-                  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                    Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                  </p>
-                </div>
-                                
-               </div>
-                                
-           </div>
+@    <!-- Container for dynamically loaded notes -->
+    <div id="notesContainer"></div>
 
+    <script>
+        // Display user info from localStorage
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (user) {
+            document.getElementById('userName').textContent = user.firstName;
+            document.getElementById('userEmail').textContent = user.email;
+            // Set avatar initial
+            const initial = user.firstName.charAt(0).toUpperCase();
+            document.getElementById('userInitial').textContent = initial;
+        }
 
-           <script>
-               const add = document.querySelector(".add-btn")
-               add.addEventListener("click", () => {
-               window.location.href = "newNote.html";
-            });
-           </script>
+        // Add note button
+        const add = document.querySelector(".add-btn");
+        add.addEventListener("click", () => {
+            window.location.href = "newNote.html";
+        });
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('email');
+            window.location.href = 'login.html';
+        }
+
+        // Redirect to login if no token
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        // Fetch and display notes
+        async function loadNotes() {
+            try {
+                const response = await fetch('http://localhost:8000/notes/', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch notes');
+                }
+
+                const notes = await response.json();
+                displayNotes(notes);
+            } catch (error) {
+                console.error('Error loading notes:', error);
+                document.getElementById('notesContainer').innerHTML = 
+                    '<p style="text-align: center; color: #666;">Error loading notes. Please try again.</p>';
+            }
+        }
+
+        // Display notes in the UI
+        function displayNotes(notes) {
+            const container = document.getElementById('notesContainer');
+            
+            if (notes.length === 0) {
+                container.innerHTML = 
+                    '<p style="text-align: center; color: #666; margin-top: 40px;">No notes yet. Click the + button to create your first note!</p>';
+                return;
+            }
+
+            container.innerHTML = notes.map(note => {
+                // Extract plain text preview from HTML content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = note.content;
+                const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                const preview = textContent.substring(0, 150) + (textContent.length > 150 ? '...' : '');
+
+                // Format date
+                const date = new Date(note.created_at);
+                const formattedDate = date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+
+                return `
+                    <div class="notes-container">
+                        <div class="note-card">
+                            <img src="https://picsum.photos/seed/${note.id}/200/200" alt="Note preview">
+                            <span class="badge ${note.is_public ? 'public' : 'private'}">
+                                ${note.is_public ? 'Public' : 'Private'}
+                            </span>
+                            
+                            <div class="note-content">
+                                <h4>${note.title}</h4>
+                                <p>${preview}</p>
+                                <small style="color: #888; font-size: 0.85rem;">${formattedDate}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Load notes when page loads
+        loadNotes();
+    </script>
 
 </body>
 </html>

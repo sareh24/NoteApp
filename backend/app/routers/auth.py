@@ -2,26 +2,28 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
+from app.security import create_access_token, get_current_user
 from passlib.context import CryptContext
-import hashlib
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+
 def hash_password(password: str) -> str:
-    """Pre-hash password with SHA256 before bcrypt to handle long passwords"""
-    # First, hash with SHA256 to get a fixed 64-char string (well under 72 byte limit)
-    sha_hash = hashlib.sha256(password.encode()).hexdigest()
-    # Then bcrypt hash the SHA256 result
-    return pwd_context.hash(sha_hash)
+    """Hash password with truncation for bcrypt 72-byte limit"""
+    # Truncate to 72 bytes (bcrypt limit)
+    truncated = password[:72]
+    return pwd_context.hash(truncated)
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify password by hashing with SHA256 first, then comparing"""
-    sha_hash = hashlib.sha256(password.encode()).hexdigest()
-    return pwd_context.verify(sha_hash, hashed)
+    """Verify password with truncation"""
+    # Truncate to same 72 bytes
+    truncated = password[:72]
+    return pwd_context.verify(truncated, hashed)
 
-@router.post("/register", response_model=schemas.UserResponse)
+@router.post("/register", response_model=schemas.TokenResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
@@ -41,9 +43,16 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    
+    # Create JWT token for auto-login
+    access_token = create_access_token(data={"sub": new_user.email})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": new_user
+    }
 
-@router.post("/login", response_model=schemas.LoginResponse)
+@router.post("/login", response_model=schemas.TokenResponse)
 def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
     # Find user
     user = db.query(models.User).filter(models.User.email == login_data.email).first()
@@ -60,7 +69,10 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
             detail="Incorrect password"
         )
     
+    # Create JWT token
+    access_token = create_access_token(data={"sub": user.email})
     return {
-        "message": "Login successful",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user": user
     }

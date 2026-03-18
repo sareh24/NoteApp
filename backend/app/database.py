@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# SQLite database (local file) - change this later for PostgreSQL
+# SQLite database (local file) -  later   PostgreSQL
 SQLALCHEMY_DATABASE_URL = "sqlite:///./notes.db"
 
 engine = create_engine(

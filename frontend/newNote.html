@@ -56,26 +56,100 @@
    
 
    <script>
+      // Store editor instance globally
+      let editorInstance;
+      
       ClassicEditor
       .create(document.querySelector('#editor'))
+      .then(editor => {
+        editorInstance = editor;
+      })
       .catch(error => {
         console.error(error);
       });
+      
       const shareBtn = document.querySelector(".share-btn");
-const shareMenu = document.getElementById("shareMenu");
+      const shareMenu = document.getElementById("shareMenu");
 
-shareBtn.addEventListener("click", () => {
-    shareMenu.style.display =
-        shareMenu.style.display === "block" ? "none" : "block";
-});
+      shareBtn.addEventListener("click", () => {
+          shareMenu.style.display =
+              shareMenu.style.display === "block" ? "none" : "block";
+      });
+      
       const buttons = document.querySelectorAll(".toggle-btn");
 
-buttons.forEach(btn => {
-  btn.addEventListener("click", () => {
-    buttons.forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-  });
-});
+      buttons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          buttons.forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+        });
+      });
+      
+      const exitbtn = document.querySelector(".exit-btn")
+      exitbtn.addEventListener("click", () => {
+         window.location.href = "library.html"
+      });
+      
+      const savebtn = document.querySelector(".save-btn")
+      savebtn.addEventListener("click", async () => {
+          // Check if user is logged in
+          const token = localStorage.getItem('token');
+          if (!token) {
+              alert('Please login first');
+              window.location.href = 'login.html';
+              return;
+          }
+
+          // Get editor content
+          if (!editorInstance) {
+              alert('Editor not ready yet');
+              return;
+          }
+          
+          const content = editorInstance.getData();
+          if (!content || content.trim() === '') {
+              alert('Please write something before saving');
+              return;
+          }
+
+          // Get visibility setting
+          const activeBtn = document.querySelector('.toggle-btn.active');
+          const isPublic = activeBtn.getAttribute('data-value') === 'public';
+
+          // Extract title from content (first line or "Untitled Note")
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = content;
+          const firstText = tempDiv.textContent.trim();
+          const title = firstText.substring(0, 50) || "Untitled Note";
+
+          try {
+              const response = await fetch('http://localhost:8000/notes/', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                      title: title,
+                      content: content,
+                      is_public: isPublic
+                  })
+              });
+
+              if (!response.ok) {
+                  const error = await response.json();
+                  throw new Error(error.detail || 'Failed to save note');
+              }
+
+              const data = await response.json();
+              console.log('Note saved:', data);
+              alert('Note saved successfully!');
+              window.location.href = 'library.html';
+          } catch (error) {
+              console.error('Save error:', error);
+              alert('Error saving note: ' + error.message);
+          }
+      });
    </script>
                                 
 </body>

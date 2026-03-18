@@ -123,6 +123,7 @@ background: linear-gradient(
                                     color: #3b312a;
                                     border: 1px solid rgba(80,60,50,0.2);
                                   }
+
                                   .add-btn {
                                     width: 40px;
                                     height: 40px;
@@ -327,11 +328,93 @@ background: linear-gradient(
                                   .exit-btn:hover {
                                     background: rgba(59, 49, 42, 0.1);
                                   }
-                                  
-                                  
-                                  
-                                  
-                                                                    
-                                  
-                                  
-                                  
+
+/* User Profile Box */
+.user-profile-box {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+
+    background: rgba(243, 239, 233, 0.95);
+    border-radius: 18px;
+    padding: 15px 22px;
+
+    display: flex;
+    align-items: center;
+    gap: 18px;
+
+    box-shadow:
+        0 15px 40px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+    border: 1px solid rgba(59, 49, 42, 0.15);
+    backdrop-filter: blur(6px);
+
+    z-index: 1000;
+}
+
+/* Left section */
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Avatar */
+.user-avatar {
+    width: 45px;
+    height: 45px;
+    background: #3b312a;   /* your dark brown */
+    border-radius: 50%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-weight: 600;
+    color: white;
+    font-size: 1.1rem;
+
+    box-shadow: 0 6px 15px rgba(59, 49, 42, 0.4);
+}
+
+/* Name + email */
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-name {
+    margin: 0;
+    color: #2a2521;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.user-email {
+    margin: 0;
+    color: #6b625c;
+    font-size: 0.75rem;
+}
+
+/* Logout button */
+.logout-btn {
+    background: transparent;
+    color: #3b312a;
+    border: 1px solid #3b312a;
+
+    border-radius: 50px;
+    padding: 6px 16px;
+    font-size: 0.85rem;
+
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+
+.logout-btn:hover {
+    background: #3b312a;
+    color: white;
+    transform: translateY(-2px);
+}

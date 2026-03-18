@@ -67,12 +67,17 @@
                 
                 const data = await response.json();
                 console.log('Registration successful:', data);
-                //alert('Registration successful! Redirecting to login...');
+                
+                // Auto-login: store token and user info
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                localStorage.setItem('email', data.user.email);
+                
+                //alert('Welcome! You are logged in.');
                 window.location.href = 'library.html';
             } catch (error) {
                 console.error('Registration error:', error);
                 alert('Registration error: ' + error.message);
-
             }
         });
     </script>                             

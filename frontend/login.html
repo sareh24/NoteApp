@@ -47,11 +47,12 @@
                 const data = await response.json();
                 console.log('Login successful:', data);
                 
-                // Store user info in localStorage
+                // Store token and user info in localStorage
+                localStorage.setItem('token', data.access_token);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 localStorage.setItem('email', email);
                 
-                alert('Login successful! Redirecting to your notes...');
+                //alert('Login successful! Redirecting to your notes...');
                 window.location.href = 'library.html';
             } catch (error) {
                 console.error('Login error:', error);
