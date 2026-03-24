@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from uuid import UUID
 from app import models, schemas
 from app.database import get_db
 from app.security import get_current_user
@@ -52,11 +53,23 @@ async def get_user_notes(
             detail="User not found"
         )
     
-    # Get all notes for this user, ordered by most recent first
-    notes = db.query(models.Note).filter(
-        models.Note.user_id == user.id
-    ).order_by(models.Note.updated_at.desc()).all()
+    # Admin can view public notes from everyone and all of their own notes.
+    # Regular users only see their own notes.
+    if user.is_admin:
+        notes = db.query(models.Note).filter(
+            (models.Note.is_public == True) | (models.Note.user_id == user.id)
+        ).order_by(models.Note.updated_at.desc()).all()
+    else:
+        notes = db.query(models.Note).filter(
+            models.Note.user_id == user.id
+        ).order_by(models.Note.updated_at.desc()).all()
     
+    return notes
+
+@router.get("/public", response_model=List[schemas.NoteResponse])
+def get_public_notes(db: Session = Depends(get_db)):
+    """Get all public notes"""
+    notes = db.query(models.Note).filter(models.Note.is_public == True).order_by(models.Note.updated_at.desc()).all()
     return notes
 
 @router.get("/{note_id}", response_model=schemas.NoteResponse)
@@ -74,11 +87,24 @@ async def get_note(
             detail="User not found"
         )
     
-    # Get the note
-    note = db.query(models.Note).filter(
-        models.Note.id == note_id,
-        models.Note.user_id == user.id
-    ).first()
+    try:
+        note_uuid = UUID(note_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid note ID format"
+        )
+
+    # Admin can access public notes from everyone and all of their own notes.
+    # Regular users can only access their own notes.
+    note_query = db.query(models.Note).filter(models.Note.id == note_uuid)
+    if user.is_admin:
+        note_query = note_query.filter(
+            (models.Note.is_public == True) | (models.Note.user_id == user.id)
+        )
+    else:
+        note_query = note_query.filter(models.Note.user_id == user.id)
+    note = note_query.first()
     
     if not note:
         raise HTTPException(
@@ -103,12 +129,25 @@ async def update_note(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+
+    if user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot edit notes"
+        )
     
-    # Get the note
-    note = db.query(models.Note).filter(
-        models.Note.id == note_id,
-        models.Note.user_id == user.id
-    ).first()
+    try:
+        note_uuid = UUID(note_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid note ID format"
+        )
+
+    # Only non-admin owners can edit notes.
+    note_query = db.query(models.Note).filter(models.Note.id == note_uuid)
+    note_query = note_query.filter(models.Note.user_id == user.id)
+    note = note_query.first()
     
     if not note:
         raise HTTPException(
@@ -144,11 +183,18 @@ async def delete_note(
             detail="User not found"
         )
     
-    # Get the note
-    note = db.query(models.Note).filter(
-        models.Note.id == note_id,
-        models.Note.user_id == user.id
-    ).first()
+    try:
+        note_uuid = UUID(note_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid note ID format"
+        )
+
+    # Only owners can delete notes.
+    note_query = db.query(models.Note).filter(models.Note.id == note_uuid)
+    note_query = note_query.filter(models.Note.user_id == user.id)
+    note = note_query.first()
     
     if not note:
         raise HTTPException(
@@ -160,7 +206,6 @@ async def delete_note(
     db.commit()
     
     return None
-
 
 def encrypt_content(content: str, user_id: str) -> str:
     # TODO: implement real encryption (AES-256-GCM + DEK/KEK scheme)

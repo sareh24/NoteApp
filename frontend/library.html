@@ -23,10 +23,14 @@
     </div>
            
     <h2>Your notes</h2>
-    <button class="add-btn">+</button>
-         
-@    <!-- Container for dynamically loaded notes -->
+    <div class="library-actions">
+        <button class="add-btn">+</button>
+    </div>
+
+    <!-- Container for dynamically loaded notes -->
     <div id="notesContainer"></div>
+
+    <button class="public-feed-btn public-feed-floating" type="button">Explore Public Notes</button>
 
     <script>
         // Display user info from localStorage
@@ -43,6 +47,11 @@
         const add = document.querySelector(".add-btn");
         add.addEventListener("click", () => {
             window.location.href = "newNote.html";
+        });
+
+        const publicFeedBtn = document.querySelector(".public-feed-btn");
+        publicFeedBtn.addEventListener("click", () => {
+            window.location.href = "publicNotes.html";
         });
 
         // Logout function
@@ -109,11 +118,12 @@
 
                 return `
                     <div class="notes-container">
-                        <div class="note-card">
+                        <div class="note-card clickable-card" data-note-id="${note.id}">
                             <img src="https://picsum.photos/seed/${note.id}/200/200" alt="Note preview">
                             <span class="badge ${note.is_public ? 'public' : 'private'}">
                                 ${note.is_public ? 'Public' : 'Private'}
                             </span>
+                            <button class="delete-note-btn" data-note-id="${note.id}" type="button">Delete</button>
                             
                             <div class="note-content">
                                 <h4>${note.title}</h4>
@@ -124,6 +134,53 @@
                     </div>
                 `;
             }).join('');
+
+            // Open note in readable mode when card is clicked
+            document.querySelectorAll('.clickable-card').forEach((card) => {
+                card.addEventListener('click', () => {
+                    const noteId = card.getAttribute('data-note-id');
+                    window.location.href = `noteView.html?id=${noteId}`;
+                });
+            });
+
+            // Delete note button should not trigger card click.
+            document.querySelectorAll('.delete-note-btn').forEach((button) => {
+                button.addEventListener('click', async (event) => {
+                    event.stopPropagation();
+                    const noteId = button.getAttribute('data-note-id');
+
+                    const confirmed = window.confirm('Delete this note? This cannot be undone.');
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`http://localhost:8000/notes/${noteId}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+
+                        if (!response.ok) {
+                            let detail = 'Failed to delete note';
+                            try {
+                                const errorData = await response.json();
+                                detail = errorData.detail || detail;
+                            } catch (_ignored) {
+                                // Keep default error detail if response has no JSON body.
+                            }
+                            throw new Error(detail);
+                        }
+
+                        // Refresh list after successful deletion.
+                        await loadNotes();
+                    } catch (error) {
+                        console.error('Delete note error:', error);
+                        alert('Could not delete note: ' + error.message);
+                    }
+                });
+            });
         }
 
         // Load notes when page loads

@@ -14,6 +14,7 @@ class UserResponse(BaseModel):
     firstName: str
     lastName: str
     email: str
+    is_admin: bool
     current_epoch: int
     created_at: datetime
     
@@ -37,6 +38,8 @@ class NoteCreate(BaseModel):
     title: Optional[str] = "Untitled Note"
     content: str
     is_public: bool = False
+    encrypted_dek: Optional[str] = None
+    key_version: Optional[str] = None
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None

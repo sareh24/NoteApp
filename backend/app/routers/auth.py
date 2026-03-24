@@ -6,22 +6,25 @@ from app.security import create_access_token, get_current_user
 from passlib.context import CryptContext
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use Argon2id for new passwords and keep legacy schemes for migration.
+pwd_context = CryptContext(schemes=["argon2", "bcrypt_sha256", "bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 def hash_password(password: str) -> str:
-    """Hash password with truncation for bcrypt 72-byte limit"""
-    # Truncate to 72 bytes (bcrypt limit)
-    truncated = password[:72]
-    return pwd_context.hash(truncated)
+    """Hash password using the primary scheme (Argon2id)."""
+    return pwd_context.hash(password)
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify password with truncation"""
-    # Truncate to same 72 bytes
-    truncated = password[:72]
-    return pwd_context.verify(truncated, hashed)
+    """Verify password against stored hash (argon2, bcrypt_sha256, or bcrypt)."""
+    try:
+        return pwd_context.verify(password, hashed)
+    except ValueError:
+        # Some legacy bcrypt hashes may raise when input exceeds 72 bytes.
+        # Retry with bcrypt-compatible byte truncation for backward compatibility.
+        truncated = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+        return pwd_context.verify(truncated, hashed)
 
 @router.post("/register", response_model=schemas.TokenResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -68,6 +71,12 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password"
         )
+
+    # Auto-upgrade legacy hashes to Argon2id after successful login.
+    if pwd_context.needs_update(user.password_hash):
+        user.password_hash = hash_password(login_data.password)
+        db.commit()
+        db.refresh(user)
     
     # Create JWT token
     access_token = create_access_token(data={"sub": user.email})

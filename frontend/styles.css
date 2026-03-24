@@ -73,6 +73,36 @@ background: linear-gradient(
 .notes-container {
      margin-top: 20px;
 }
+
+.library-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.public-feed-btn {
+  border: 1px solid #3b312a;
+  background: #f3efe9;
+  color: #3b312a;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.public-feed-btn:hover {
+  background: #3b312a;
+  color: #fff;
+}
+
+.public-feed-floating {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+}
                                   
 .note-card {
       position: relative;
@@ -87,6 +117,35 @@ background: linear-gradient(
       box-shadow: 
     0 15px 35px rgba(0,0,0,0.25);
 }
+
+    .clickable-card {
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .clickable-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 34px rgba(0,0,0,0.28);
+    }
+
+    .delete-note-btn {
+      position: absolute;
+      right: 20px;
+      bottom: 18px;
+      border: 1px solid #a8443a;
+      background: #fff5f3;
+      color: #a8443a;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .delete-note-btn:hover {
+      background: #a8443a;
+      color: white;
+    }
                                   
 .note-card img {
       width: 120px;
@@ -180,6 +239,23 @@ background: linear-gradient(
                                   .editor-wrapper h2 {
                                     margin-bottom: 20px;
                                     color: #2a2521;
+                                  }
+
+                                  .note-title-input {
+                                    width: 100%;
+                                    border: 1px solid #c9bfb3;
+                                    border-radius: 12px;
+                                    padding: 12px 14px;
+                                    font-size: 1rem;
+                                    margin-bottom: 14px;
+                                    background: #fffdfa;
+                                    color: #2a2521;
+                                  }
+
+                                  .note-title-input:focus {
+                                    outline: none;
+                                    border-color: #8f7b67;
+                                    box-shadow: 0 0 0 3px rgba(143, 123, 103, 0.18);
                                   }
                                   .ck-editor {
                                     flex: 1;
@@ -313,18 +389,25 @@ background: linear-gradient(
                                   .save-btn:hover {
                                     background: #4a3f37;
                                   }
- .import-btn {
-    background-color: #6B6B6B;
-    color: white;
-    border: none;
-    border-radius: 20px;
-    padding: 10px 20px;
-    cursor: pointer;
-    font-size: 14px;
+.ck.ck-toolbar .import-btn {
+    padding: 4px 10px !important;
+    border-radius: 40px !important;
+    border: 1.5px solid #3d3929 !important;
+    background: transparent !important;
+    color: #3d3929 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    transition: all 0.2s ease !important;
+    height: auto !important;
+    line-height: normal !important;
 }
 
-.import-btn:hover {
-    background-color: #555555;
+.ck.ck-toolbar .import-btn:hover {
+    background: #3d3929 !important;
+    color: #f0ede6 !important;
 }
     
                                   /* exit button softer */
@@ -341,6 +424,32 @@ background: linear-gradient(
                                   .exit-btn:hover {
                                     background: rgba(59, 49, 42, 0.1);
                                   }
+
+                  .note-view-wrapper {
+                    padding-bottom: 40px;
+                  }
+
+                  .note-view-topbar {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                  }
+
+                  .note-view-meta {
+                    color: #5a524b;
+                    margin-bottom: 18px;
+                  }
+
+                  .note-view-content {
+                    background: #fff;
+                    border: 1px solid #ddd3c8;
+                    border-radius: 12px;
+                    padding: 24px;
+                    min-height: 300px;
+                    color: #2a2521;
+                    line-height: 1.7;
+                  }
 
 /* User Profile Box */
 .user-profile-box {

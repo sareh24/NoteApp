@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Note</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="newnote">
+    <div class="editor-wrapper note-view-wrapper">
+        <div class="note-view-topbar">
+            <button id="backBtn" class="exit-btn" type="button">Back</button>
+            <button id="editBtn" class="save-btn" type="button">Edit</button>
+        </div>
+
+        <h2 id="noteTitle">Loading...</h2>
+        <p id="noteMeta" class="note-view-meta"></p>
+
+        <div id="noteContent" class="note-view-content"></div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+        const params = new URLSearchParams(window.location.search);
+        const noteId = params.get('id');
+
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        if (!noteId) {
+            window.location.href = 'library.html';
+        }
+
+        document.getElementById('backBtn').addEventListener('click', () => {
+            window.location.href = 'library.html';
+        });
+
+        document.getElementById('editBtn').addEventListener('click', () => {
+            window.location.href = `newNote.html?edit=${noteId}`;
+        });
+
+        if (currentUser && currentUser.is_admin) {
+            document.getElementById('editBtn').style.display = 'none';
+        }
+
+        async function loadNote() {
+            try {
+                const response = await fetch(`http://localhost:8000/notes/${noteId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Could not load note');
+                }
+
+                const note = await response.json();
+                const createdAt = new Date(note.created_at).toLocaleString();
+                const visibility = note.is_public ? 'Public' : 'Private';
+
+                document.getElementById('noteTitle').textContent = note.title || 'Untitled Note';
+                document.getElementById('noteMeta').textContent = `${visibility} - Created: ${createdAt}`;
+                document.getElementById('noteContent').innerHTML = note.content || '<p>No content</p>';
+            } catch (error) {
+                console.error('View note error:', error);
+                alert('Could not open this note.');
+                window.location.href = 'library.html';
+            }
+        }
+
+        loadNote();
+    </script>
+</body>
+</html>

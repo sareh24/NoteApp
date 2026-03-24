@@ -1,213 +1,250 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-                                    <meta charset="UTF-8">
-                                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                    <title>Document</title>
-                                    <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
-                                    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-2. Update your import handler:
-                                    <link rel="stylesheet" href="styles.css">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Editor</title>
+    <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body class="newnote">
-                                    <div class="editor-wrapper">
+    <div class="editor-wrapper">
+        <button class="share-btn" type="button">Share</button>
 
-                                                                        <!-- SHARE BUTTON -->
-                                                                        <button class="share-btn">Share</button>
-                                                                    
-                                                                        <!-- SHARE MENU -->
-                                                                        <div class="share-menu" id="shareMenu">
-                                                                          <h4>Share with someone</h4>
-                                                                          <input type="text" placeholder="Search username..." class="share-search">
-                                                                    
-                                                                          <div class="search-results">
-                                                                            <div class="user-result">JohnDoe</div>
-                                                                            <div class="user-result">Sarah21</div>
-                                                                          </div>
-                                                                    
-                                                                          <button class="send-share">Send your Note</button>
-                                                                        </div>
-                                                                    
-                                                                        <!-- VISIBILITY TOGGLE -->
-                                                                        <div class="visibility-toggle">
-                                                                          <button type="button" class="toggle-btn active" data-value="public">
-                                                                            Public
-                                                                          </button>
-                                                                          <button type="button" class="toggle-btn" data-value="private">
-                                                                            Private
-                                                                          </button>
-                                                                        </div>
-                                                                    
-                                                                        <!-- TITLE -->
-                                                                        <h2>Write your note</h2>
-                                                                    
-                                                                        <!-- EDITOR -->
-                                                                        <textarea id="editor"></textarea>
-                                                                    
-                                                                        <!-- BOTTOM BUTTONS -->
-                                                                        <div class="bottom-actions">
-                                                                          <button class="save-btn">Save</button>
-                                                                          <button class="import-btn">Import</button>  <!-- add this -->
-                                                                         <input type="file" id="importFile" accept=".txt,.html,.md,.docx" style="display:none">
-                                                                          <button class="exit-btn">Exit</button>
-                                                                        </div>
-                                                                    
-                                                                      </div>
-    
-   
+        <div class="share-menu" id="shareMenu">
+            <h4>Share with someone</h4>
+            <input type="text" placeholder="Search username..." class="share-search">
+            <div class="search-results">
+                <div class="user-result">JohnDoe</div>
+                <div class="user-result">Sarah21</div>
+            </div>
+            <button class="send-share" type="button">Send your Note</button>
+        </div>
+
+        <div class="visibility-toggle">
+            <button type="button" class="toggle-btn active" data-value="public">Public</button>
+            <button type="button" class="toggle-btn" data-value="private">Private</button>
+        </div>
+
+        <h2 id="editorTitle">Write your note</h2>
+
+        <input id="noteTitleInput" class="note-title-input" type="text" maxlength="120" placeholder="Add note title...">
+
+        <textarea id="editor"></textarea>
+
+        <div class="bottom-actions">
+            <button class="save-btn" type="button">Save</button>
+            <button class="import-btn" type="button">Import</button>
+            <input type="file" id="importFile" accept=".txt,.html,.md,.docx,.png,.jpg,.jpeg,.gif,.pdf" style="display:none">
+            <button class="exit-btn" type="button">Exit</button>
+        </div>
     </div>
-   
 
-   <script>
-    async function encryptNote(content) {
-    // TODO: replace with real AES-256-GCM encryption
-    return {
-        ciphertext: content,      // plaintext for now
-        encryptedDek: null,
-        keyVersion: "v1"
-    };
-}
-      // Store editor instance globally
-      let editorInstance;
-      
-      ClassicEditor
-      .create(document.querySelector('#editor'))
-      .then(editor => {
-        editorInstance = editor;
-      })
-      .catch(error => {
-        console.error(error);
-      });
-      
-      const shareBtn = document.querySelector(".share-btn");
-      const shareMenu = document.getElementById("shareMenu");
+    <script>
+        // Placeholder for private-note encryption flow.
+        async function encryptNote(content) {
+            return {
+                ciphertext: content,
+                encryptedDek: null,
+                keyVersion: "v1"
+            };
+        }
 
-      shareBtn.addEventListener("click", () => {
-          shareMenu.style.display =
-              shareMenu.style.display === "block" ? "none" : "block";
-      });
-      
-      const buttons = document.querySelectorAll(".toggle-btn");
+        let editorInstance;
+        const token = localStorage.getItem('token');
+        const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+        const params = new URLSearchParams(window.location.search);
+        const editingNoteId = params.get('edit');
+        const importBtn = document.querySelector('.import-btn');
+        const importFile = document.getElementById('importFile');
+        const noteTitleInput = document.getElementById('noteTitleInput');
 
-      buttons.forEach(btn => {
-        btn.addEventListener("click", () => {
-          buttons.forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        if (currentUser && currentUser.is_admin && editingNoteId) {
+            alert('Admins are not allowed to edit notes.');
+            window.location.href = 'library.html';
+        }
+
+        function setVisibility(isPublic) {
+            const buttons = document.querySelectorAll('.toggle-btn');
+            buttons.forEach((button) => {
+                const shouldBeActive = (button.getAttribute('data-value') === 'public') === isPublic;
+                button.classList.toggle('active', shouldBeActive);
+            });
+        }
+
+        async function loadNoteForEditing() {
+            if (!editingNoteId) {
+                return;
+            }
+
+            document.getElementById('editorTitle').textContent = 'Edit note';
+            document.querySelector('.save-btn').textContent = 'Update';
+
+            try {
+                const response = await fetch(`http://localhost:8000/notes/${editingNoteId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load note');
+                }
+
+                const note = await response.json();
+                noteTitleInput.value = note.title || '';
+                editorInstance.setData(note.content || '');
+                setVisibility(Boolean(note.is_public));
+            } catch (error) {
+                console.error('Load note error:', error);
+                alert('Could not load note for editing.');
+                window.location.href = 'library.html';
+            }
+        }
+
+        ClassicEditor
+            .create(document.querySelector('#editor'))
+            .then(async (editor) => {
+                editorInstance = editor;
+                const toolbar = editor.ui.view.toolbar.element;
+                importBtn.remove();
+                toolbar.appendChild(importBtn);
+
+                await loadNoteForEditing();
+            })
+            .catch((error) => {
+                console.error(error);
+            });
+
+        const shareBtn = document.querySelector('.share-btn');
+        const shareMenu = document.getElementById('shareMenu');
+
+        shareBtn.addEventListener('click', () => {
+            shareMenu.style.display = shareMenu.style.display === 'block' ? 'none' : 'block';
         });
-      });
-      const importBtn = document.querySelector(".import-btn");
-const importFile = document.getElementById("importFile");
 
-importBtn.addEventListener("click", () => {
-    importFile.click();  // open file picker
-});
+        const buttons = document.querySelectorAll('.toggle-btn');
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                buttons.forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
 
-importFile.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+        importBtn.addEventListener('click', () => {
+            importFile.click();
+        });
 
-    // handle .docx differently
-    if (file.name.endsWith('.docx')) {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const arrayBuffer = event.target.result;
-            const result = await mammoth.convertToHtml({ arrayBuffer });
-            if (editorInstance) {
-                editorInstance.setData(result.value);
+        importFile.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file || !editorInstance) {
+                return;
             }
-        };
-        reader.readAsArrayBuffer(file);  // binary read, not text
-    } else {
-        // .txt and .html stay as before
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (editorInstance) {
-                editorInstance.setData(event.target.result);
+
+            if (file.name.endsWith('.docx')) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const arrayBuffer = e.target.result;
+                    const result = await mammoth.convertToHtml({ arrayBuffer });
+                    editorInstance.setData(result.value);
+                };
+                reader.readAsArrayBuffer(file);
+                return;
             }
-        };
-        reader.readAsText(file);
-    }
-});
-      const exitbtn = document.querySelector(".exit-btn")
-      exitbtn.addEventListener("click", () => {
-         window.location.href = "library.html"
-      });
-      
-      const savebtn = document.querySelector(".save-btn")
-      savebtn.addEventListener("click", async () => {
-          // Check if user is logged in
-          const token = localStorage.getItem('token');
-          if (!token) {
-              alert('Please login first');
-              window.location.href = 'login.html';
-              return;
-          }
 
-          // Get editor content
-          if (!editorInstance) {
-              alert('Editor not ready yet');
-              return;
-          }
-          
-          const content = editorInstance.getData();
-          if (!content || content.trim() === '') {
-              alert('Please write something before saving');
-              return;
-          }
+            if (file.name.endsWith('.png') || file.name.endsWith('.jpg') || file.name.endsWith('.jpeg') || file.name.endsWith('.gif')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    editorInstance.setData(`<img src="${e.target.result}" style="max-width:50%">`);
+                };
+                reader.readAsDataURL(file);
+                return;
+            }
 
-          // Get visibility setting
-          const activeBtn = document.querySelector('.toggle-btn.active');
-          const isPublic = activeBtn.getAttribute('data-value') === 'public';
+            if (file.name.endsWith('.pdf')) {
+                const url = URL.createObjectURL(file);
+                editorInstance.setData(`<p><strong>${file.name}</strong> - <a href="${url}" target="_blank">Open PDF</a></p>`);
+                return;
+            }
 
-          // Extract title from content (first line or "Untitled Note")
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = content;
-          const firstText = tempDiv.textContent.trim();
-          const title = firstText.substring(0, 50) || "Untitled Note";
-                    let finalContent = content;
-          let encryptedDek = null;
-          let keyVersion = null;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                editorInstance.setData(e.target.result);
+            };
+            reader.readAsText(file);
+        });
 
-          if (!isPublic) {
-              const encrypted = await encryptNote(content);  // stub for now
-              finalContent = encrypted.ciphertext;
-              encryptedDek = encrypted.encryptedDek;
-              keyVersion = encrypted.keyVersion;
-          }
-      
+        document.querySelector('.exit-btn').addEventListener('click', () => {
+            window.location.href = 'library.html';
+        });
 
-          try {
-              const response = await fetch('http://localhost:8000/notes/', {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${token}`
-                  },
-                  body: JSON.stringify({
-                      title: title,
-                      content: finalContent,       // encrypted if private
-                      is_public: isPublic,
-                      encrypted_dek: encryptedDek, // null if public
-                      key_version: keyVersion       // null if public
-                  })
-              });
+        document.querySelector('.save-btn').addEventListener('click', async () => {
+            if (!editorInstance) {
+                alert('Editor not ready yet');
+                return;
+            }
 
-              if (!response.ok) {
-                  const error = await response.json();
-                  throw new Error(error.detail || 'Failed to save note');
-              }
+            const content = editorInstance.getData();
+            if (!content || content.trim() === '') {
+                alert('Please write something before saving');
+                return;
+            }
 
-              const data = await response.json();
-              console.log('Note saved:', data);
-              alert('Note saved successfully!');
-              window.location.href = 'library.html';
-          } catch (error) {
-              console.error('Save error:', error);
-              alert('Error saving note: ' + error.message);
-          }
-      });
-   </script>
-                                
+            const activeBtn = document.querySelector('.toggle-btn.active');
+            const isPublic = activeBtn.getAttribute('data-value') === 'public';
+
+            const title = noteTitleInput.value.trim() || 'Untitled Note';
+
+            let finalContent = content;
+            let encryptedDek = null;
+            let keyVersion = null;
+
+            if (!isPublic) {
+                const encrypted = await encryptNote(content);
+                finalContent = encrypted.ciphertext;
+                encryptedDek = encrypted.encryptedDek;
+                keyVersion = encrypted.keyVersion;
+            }
+
+            const endpoint = editingNoteId
+                ? `http://localhost:8000/notes/${editingNoteId}`
+                : 'http://localhost:8000/notes/';
+            const method = editingNoteId ? 'PUT' : 'POST';
+
+            try {
+                const response = await fetch(endpoint, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        title,
+                        content: finalContent,
+                        is_public: isPublic,
+                        encrypted_dek: encryptedDek,
+                        key_version: keyVersion
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to save note');
+                }
+
+                alert(editingNoteId ? 'Note updated successfully!' : 'Note saved successfully!');
+                window.location.href = 'library.html';
+            } catch (error) {
+                console.error('Save error:', error);
+                alert('Error saving note: ' + error.message);
+            }
+        });
+    </script>
 </body>
 </html>
