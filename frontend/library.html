@@ -33,6 +33,13 @@
     <button class="public-feed-btn public-feed-floating" type="button">Explore Public Notes</button>
 
     <script>
+        // Defensive cleanup: if a stale Bootstrap backdrop exists, it can block all clicks.
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = 'auto';
+        document.body.style.paddingRight = '0';
+        document.body.style.pointerEvents = 'auto';
+        document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+
         // Display user info from localStorage
         const user = JSON.parse(localStorage.getItem('user'));
         if (user) {
