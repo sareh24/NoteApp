@@ -1,14 +1,27 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-# SQLite database (local file) -  later   PostgreSQL
-SQLALCHEMY_DATABASE_URL = "sqlite:///./notes.db"
+# Always prefer values from backend/.env over stale exported shell variables.
+load_dotenv(override=True)
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False}  
+# Use DATABASE_URL from .env for PostgreSQL, fallback to SQLite
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///./notes.db"
 )
+
+# PostgreSQL requires different connection args than SQLite
+if "postgresql" in SQLALCHEMY_DATABASE_URL:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=False)
+else:
+    # SQLite fallback
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
