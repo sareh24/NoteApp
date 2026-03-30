@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Public Notes</title>
+    <title>Shared With Me</title>
     <script src="crypto.js"></script>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -22,12 +22,12 @@
         <button class="logout-btn" onclick="logout()">Logout</button>
     </div>
 
-    <h2>Public Notes</h2>
+    <h2>Shared With Me</h2>
     <div class="library-actions">
         <button class="exit-btn" type="button" id="backToLibraryBtn">Back to My Notes</button>
     </div>
 
-    <div id="publicNotesContainer"></div>
+    <div id="sharedNotesContainer"></div>
 
     <script>
         const token = localStorage.getItem('token');
@@ -58,9 +58,9 @@
             window.location.href = 'library.html';
         });
 
-        async function loadPublicNotes() {
+        async function loadSharedNotes() {
             try {
-                const response = await fetch('http://localhost:8000/notes/public', {
+                const response = await fetch('http://localhost:8000/notes/shared', {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -68,32 +68,38 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to fetch public notes');
+                    throw new Error('Failed to fetch shared notes');
                 }
 
                 const notes = await response.json();
-                renderPublicNotes(notes);
+                renderSharedNotes(notes);
             } catch (error) {
-                console.error('Error loading public notes:', error);
-                document.getElementById('publicNotesContainer').innerHTML =
-                    '<p style="text-align: center; color: #666; margin-top: 40px;">Could not load public notes.</p>';
+                console.error('Error loading shared notes:', error);
+                document.getElementById('sharedNotesContainer').innerHTML =
+                    '<p style="text-align: center; color: #666; margin-top: 40px;">Could not load shared notes.</p>';
             }
         }
 
-        function renderPublicNotes(notes) {
-            const container = document.getElementById('publicNotesContainer');
+        function renderSharedNotes(notes) {
+            const container = document.getElementById('sharedNotesContainer');
 
             if (!Array.isArray(notes) || notes.length === 0) {
                 container.innerHTML =
-                    '<p style="text-align: center; color: #666; margin-top: 40px;">No public notes available yet.</p>';
+                    '<p style="text-align: center; color: #666; margin-top: 40px;">No notes have been shared with you yet.</p>';
                 return;
             }
 
             container.innerHTML = notes.map((note) => {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = note.content;
-                const textContent = tempDiv.textContent || tempDiv.innerText || '';
-                const preview = textContent.substring(0, 150) + (textContent.length > 150 ? '...' : '');
+                let preview = '';
+                if (!note.is_public && typeof isEncryptedPayload === 'function' && isEncryptedPayload(note.content || '')) {
+                    preview = '[Encrypted private note]';
+                } else {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = note.content;
+                    const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                    preview = textContent.substring(0, 150) + (textContent.length > 150 ? '...' : '');
+                }
+
                 const date = new Date(note.created_at);
                 const formattedDate = date.toLocaleDateString('en-US', {
                     year: 'numeric',
@@ -105,7 +111,9 @@
                     <div class="notes-container">
                         <div class="note-card clickable-card" data-note-id="${note.id}">
                             <img src="https://picsum.photos/seed/${note.id}/200/200" alt="Note preview">
-                            <span class="badge public">Public</span>
+                            <span class="badge ${note.is_public ? 'public' : 'private'}">
+                                ${note.is_public ? 'Public' : 'Private'}
+                            </span>
                             <div class="note-content">
                                 <h4>${note.title || 'Untitled Note'}</h4>
                                 <p>${preview}</p>
@@ -124,7 +132,7 @@
             });
         }
 
-        loadPublicNotes();
+        loadSharedNotes();
     </script>
 </body>
 </html>

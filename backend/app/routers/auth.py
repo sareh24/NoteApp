@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from typing import List
 from app import models, schemas
 from app.database import get_db
 from app.security import create_access_token, get_current_user
@@ -85,3 +87,29 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user
     }
+
+@router.get("/users/search", response_model=List[schemas.UserSearchResult])
+def search_users(
+    q: str,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user)
+):
+    """Search non-admin users by name or email (excludes the caller)."""
+    query = q.strip()
+    if len(query) < 2:
+        return []
+
+    pattern = f"%{query}%"
+    users = (
+        db.query(models.User)
+        .filter(
+            models.User.is_admin == False,
+            models.User.email != current_user_email,
+            func.lower(models.User.firstName).like(func.lower(pattern))
+            | func.lower(models.User.lastName).like(func.lower(pattern))
+            | func.lower(models.User.email).like(func.lower(pattern)),
+        )
+        .limit(10)
+        .all()
+    )
+    return users

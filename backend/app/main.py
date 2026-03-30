@@ -24,7 +24,20 @@ def ensure_user_admin_column():
     if "is_admin" in user_columns:
         return
     with engine.connect() as connection:
-        connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+        connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+        connection.commit()
+
+
+def ensure_shared_note_can_edit_column():
+    """Add shared_notes.can_edit for existing SQLite databases without migrations."""
+    inspector = inspect(engine)
+    if "shared_notes" not in inspector.get_table_names():
+        return
+    shared_columns = {column["name"] for column in inspector.get_columns("shared_notes")}
+    if "can_edit" in shared_columns:
+        return
+    with engine.connect() as connection:
+        connection.execute(text("ALTER TABLE shared_notes ADD COLUMN can_edit BOOLEAN DEFAULT FALSE"))
         connection.commit()
 
 
@@ -59,6 +72,7 @@ def ensure_default_admin_user():
 
 
 ensure_user_admin_column()
+ensure_shared_note_can_edit_column()
 ensure_default_admin_user()
 
 app = FastAPI(title="Secure Notes API")

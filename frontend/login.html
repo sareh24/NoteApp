@@ -20,6 +20,7 @@
         <button type="submit" class="subbutton">Submit</button>
         <p class="mt-3">Don't have an account? <a href="signup.html">Sign up</a></p>
     </form>
+    <script src="crypto.js"></script>
     <script>
         const form = document.querySelector('#loginForm');
         form.addEventListener('submit', async (e) => {
@@ -51,6 +52,19 @@
                 localStorage.setItem('token', data.access_token);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 localStorage.setItem('email', email);
+
+                // Build and cache user key locally for private-note encryption.
+                // Keep login resilient if crypto setup fails.
+                try {
+                    if (typeof deriveAndStoreKeyFromCredentials === 'function' && window.crypto && window.crypto.subtle) {
+                        await deriveAndStoreKeyFromCredentials(password, email);
+                    }
+                } catch (cryptoError) {
+                    console.warn('Key setup warning:', cryptoError);
+                    alert('Login succeeded, but private-note encryption key setup failed. You may be asked for your password when opening or saving private notes.');
+                }
+
+                localStorage.setItem('userEmail', email);
                 
                 //alert('Login successful! Redirecting to your notes...');
                 window.location.href = 'library.html';

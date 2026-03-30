@@ -4,13 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>View Note</title>
+    <script src="crypto.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="newnote">
     <div class="editor-wrapper note-view-wrapper">
         <div class="note-view-topbar">
             <button id="backBtn" class="exit-btn" type="button">Back</button>
-            <button id="editBtn" class="save-btn" type="button">Edit</button>
+            <div class="note-view-actions">
+                <button id="shareBtn" class="save-btn" type="button">Share</button>
+                <button id="editBtn" class="save-btn" type="button">Edit</button>
+            </div>
+        </div>
+
+        <div class="share-menu" id="shareMenu">
+            <h4>Share with someone</h4>
+            <input type="text" id="shareSearch" placeholder="Search by name or email..." class="share-search" autocomplete="off">
+            <div id="searchResults" class="search-results"></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;">
+                <input type="checkbox" id="allowEditShare"> Allow this user to edit
+            </label>
+            <button class="send-share" type="button" id="sendShareBtn">Send your Note</button>
         </div>
 
         <h2 id="noteTitle">Loading...</h2>
@@ -24,6 +38,15 @@
         const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
         const params = new URLSearchParams(window.location.search);
         const noteId = params.get('id');
+        const shareBtn = document.getElementById('shareBtn');
+        const shareMenu = document.getElementById('shareMenu');
+        const shareSearchInput = document.getElementById('shareSearch');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const allowEditShareCheckbox = document.getElementById('allowEditShare');
+        const sendShareBtn = document.getElementById('sendShareBtn');
+
+        let selectedUser = null;
+        let searchTimeout = null;
 
         if (!token) {
             window.location.href = 'login.html';
@@ -41,8 +64,132 @@
             window.location.href = `newNote.html?edit=${noteId}`;
         });
 
+        shareBtn.addEventListener('click', () => {
+            const isOpen = shareMenu.style.display === 'block';
+            shareMenu.style.display = isOpen ? 'none' : 'block';
+            if (!isOpen) {
+                shareSearchInput.focus();
+            }
+        });
+
+        shareSearchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            selectedUser = null;
+            const query = shareSearchInput.value.trim();
+            if (query.length < 2) {
+                searchResultsDiv.innerHTML = '';
+                return;
+            }
+            searchTimeout = setTimeout(() => searchUsers(query), 300);
+        });
+
+        async function searchUsers(query) {
+            try {
+                const response = await fetch(
+                    `http://localhost:8000/auth/users/search?q=${encodeURIComponent(query)}`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                if (!response.ok) {
+                    throw new Error('Search failed');
+                }
+                const users = await response.json();
+                renderUserResults(users);
+            } catch (error) {
+                searchResultsDiv.innerHTML = '<p style="color:red;font-size:13px">Search failed. Try again.</p>';
+            }
+        }
+
+        function renderUserResults(users) {
+            searchResultsDiv.innerHTML = '';
+            if (users.length === 0) {
+                searchResultsDiv.innerHTML = '<p style="font-size:13px;color:#888;padding:4px 0">No users found</p>';
+                return;
+            }
+
+            users.forEach((user) => {
+                const div = document.createElement('div');
+                div.className = 'user-result';
+                div.textContent = `${user.firstName} ${user.lastName}`;
+                div.title = user.email;
+
+                div.addEventListener('click', () => {
+                    document.querySelectorAll('#searchResults .user-result').forEach((el) =>
+                        el.classList.remove('selected')
+                    );
+                    div.classList.add('selected');
+                    selectedUser = { id: user.id, name: `${user.firstName} ${user.lastName}` };
+                });
+
+                searchResultsDiv.appendChild(div);
+            });
+        }
+
+        sendShareBtn.addEventListener('click', async () => {
+            if (!selectedUser) {
+                alert('Please select a user from the search results.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8000/notes/${noteId}/share`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        recipient_id: selectedUser.id,
+                        can_edit: allowEditShareCheckbox.checked
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Share failed');
+                }
+
+                alert(`Note shared with ${selectedUser.name}!`);
+                shareMenu.style.display = 'none';
+                shareSearchInput.value = '';
+                searchResultsDiv.innerHTML = '';
+                selectedUser = null;
+                allowEditShareCheckbox.checked = false;
+            } catch (error) {
+                alert('Could not share note: ' + error.message);
+            }
+        });
+
         if (currentUser && currentUser.is_admin) {
             document.getElementById('editBtn').style.display = 'none';
+        }
+
+        async function ensurePrivateKeyReady(ownerEmail) {
+            if (!ownerEmail) {
+                throw new Error('Could not decrypt private note. Please log in again.');
+            }
+
+            if (typeof loadStoredKeyForUser === 'function') {
+                const existing = await loadStoredKeyForUser(ownerEmail);
+                if (existing) {
+                    return;
+                }
+            }
+
+            const password = window.prompt('Enter your password to unlock private notes for this session:');
+            if (!password) {
+                throw new Error('Could not decrypt private note. Please log in again.');
+            }
+
+            if (typeof deriveAndStoreKeyFromCredentials !== 'function') {
+                throw new Error('Crypto module is unavailable.');
+            }
+
+            await deriveAndStoreKeyFromCredentials(password, ownerEmail);
+
+            const restored = await loadStoredKeyForUser(ownerEmail);
+            if (!restored) {
+                throw new Error('Could not decrypt private note. Please log in again.');
+            }
         }
 
         async function loadNote() {
@@ -61,10 +208,30 @@
                 const note = await response.json();
                 const createdAt = new Date(note.created_at).toLocaleString();
                 const visibility = note.is_public ? 'Public' : 'Private';
+                let noteContent = note.content || '<p>No content</p>';
+
+                // Decrypt encrypted private notes for the owner.
+                if (!note.is_public) {
+                    const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
+                    await ensurePrivateKeyReady(ownerEmail);
+                    noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                }
+
+                const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
+                const canEdit = isOwner || Boolean(note.can_edit);
+
+                if (!canEdit || (currentUser && currentUser.is_admin)) {
+                    document.getElementById('editBtn').style.display = 'none';
+                }
+
+                if (!isOwner || (currentUser && currentUser.is_admin)) {
+                    shareBtn.style.display = 'none';
+                    shareMenu.style.display = 'none';
+                }
 
                 document.getElementById('noteTitle').textContent = note.title || 'Untitled Note';
                 document.getElementById('noteMeta').textContent = `${visibility} - Created: ${createdAt}`;
-                document.getElementById('noteContent').innerHTML = note.content || '<p>No content</p>';
+                document.getElementById('noteContent').innerHTML = noteContent;
             } catch (error) {
                 console.error('View note error:', error);
                 alert('Could not open this note.');

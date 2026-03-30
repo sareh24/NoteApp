@@ -45,6 +45,8 @@ class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     is_public: Optional[bool] = None
+    encrypted_dek: Optional[str] = None
+    key_version: Optional[str] = None
 
 class NoteResponse(BaseModel):
     id: UUID
@@ -52,8 +54,24 @@ class NoteResponse(BaseModel):
     title: str
     content: str
     is_public: bool
+    encrypted_dek: Optional[str] = None
+    key_version: Optional[str] = None
+    can_edit: bool = False
     created_at: datetime
     updated_at: datetime
     
+    class Config:
+        from_attributes = True
+
+class ShareNoteRequest(BaseModel):
+    recipient_id: UUID
+    can_edit: bool = False
+
+class UserSearchResult(BaseModel):
+    id: UUID
+    firstName: str
+    lastName: str
+    email: str
+
     class Config:
         from_attributes = True

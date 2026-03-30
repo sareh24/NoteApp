@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Notes</title>
+    <script src="crypto.js"></script>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -25,12 +26,13 @@
     <h2>Your notes</h2>
     <div class="library-actions">
         <button class="add-btn">+</button>
+        <button class="public-feed-btn" type="button" id="sharedNotesBtn">Shared With Me</button>
     </div>
 
     <!-- Container for dynamically loaded notes -->
     <div id="notesContainer"></div>
 
-    <button class="public-feed-btn public-feed-floating" type="button">Explore Public Notes</button>
+    <button class="public-feed-btn public-feed-floating" type="button" id="publicNotesBtn">Explore Public Notes</button>
 
     <script>
         // Defensive cleanup: if a stale Bootstrap backdrop exists, it can block all clicks.
@@ -56,16 +58,24 @@
             window.location.href = "newNote.html";
         });
 
-        const publicFeedBtn = document.querySelector(".public-feed-btn");
+        const publicFeedBtn = document.getElementById('publicNotesBtn');
         publicFeedBtn.addEventListener("click", () => {
             window.location.href = "publicNotes.html";
         });
 
+        document.getElementById('sharedNotesBtn').addEventListener('click', () => {
+            window.location.href = 'sharedNotes.html';
+        });
+
         // Logout function
         function logout() {
+            if (typeof clearStoredKey === 'function') {
+                clearStoredKey();
+            }
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.removeItem('email');
+            localStorage.removeItem('userEmail');
             window.location.href = 'login.html';
         }
 
@@ -110,10 +120,15 @@
 
             container.innerHTML = notes.map(note => {
                 // Extract plain text preview from HTML content
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = note.content;
-                const textContent = tempDiv.textContent || tempDiv.innerText || '';
-                const preview = textContent.substring(0, 150) + (textContent.length > 150 ? '...' : '');
+                let preview = '';
+                if (!note.is_public && typeof isEncryptedPayload === 'function' && isEncryptedPayload(note.content || '')) {
+                    preview = '[Encrypted private note]';
+                } else {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = note.content;
+                    const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                    preview = textContent.substring(0, 150) + (textContent.length > 150 ? '...' : '');
+                }
 
                 // Format date
                 const date = new Date(note.created_at);

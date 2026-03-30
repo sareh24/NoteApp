@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, LargeBinary, Integer, DateTime, ForeignKey, Text, Boolean, Uuid
+from sqlalchemy import Column, String, LargeBinary, Integer, DateTime, ForeignKey, Text, Boolean, Uuid, UniqueConstraint
 from datetime import datetime
 import uuid
 from app.database import Base
@@ -27,4 +27,15 @@ class Note(Base):
     key_version = Column(String, nullable=True)  # tracks which key was used, for rotation
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SharedNote(Base):
+    __tablename__ = "shared_notes"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    note_id = Column(Uuid(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
+    recipient_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    can_edit = Column(Boolean, default=False)
+    shared_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("note_id", "recipient_id", name="uq_shared_note_recipient"),)
 

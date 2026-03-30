@@ -6,6 +6,7 @@
     <title>Note Editor</title>
     <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="crypto.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="newnote">
@@ -14,11 +15,11 @@
 
         <div class="share-menu" id="shareMenu">
             <h4>Share with someone</h4>
-            <input type="text" placeholder="Search username..." class="share-search">
-            <div class="search-results">
-                <div class="user-result">JohnDoe</div>
-                <div class="user-result">Sarah21</div>
-            </div>
+            <input type="text" id="shareSearch" placeholder="Search by name or email..." class="share-search" autocomplete="off">
+            <div id="searchResults" class="search-results"></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;">
+                <input type="checkbox" id="allowEditShare"> Allow this user to edit
+            </label>
             <button class="send-share" type="button">Send your Note</button>
         </div>
 
@@ -42,14 +43,6 @@
     </div>
 
     <script>
-        // Placeholder for private-note encryption flow.
-        async function encryptNote(content) {
-            return {
-                ciphertext: content,
-                encryptedDek: null,
-                keyVersion: "v1"
-            };
-        }
 
         let editorInstance;
         const token = localStorage.getItem('token');
@@ -67,6 +60,39 @@
         if (currentUser && currentUser.is_admin && editingNoteId) {
             alert('Admins are not allowed to edit notes.');
             window.location.href = 'library.html';
+        }
+
+        function getOwnerEmail() {
+            return localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
+        }
+
+        async function ensurePrivateKeyReady(ownerEmail) {
+            if (!ownerEmail) {
+                throw new Error('Encryption key is not available for current user session.');
+            }
+
+            if (typeof loadStoredKeyForUser === 'function') {
+                const existing = await loadStoredKeyForUser(ownerEmail);
+                if (existing) {
+                    return;
+                }
+            }
+
+            const password = window.prompt('Enter your password to unlock private notes for this session:');
+            if (!password) {
+                throw new Error('Encryption key is not available for current user session.');
+            }
+
+            if (typeof deriveAndStoreKeyFromCredentials !== 'function') {
+                throw new Error('Crypto module is unavailable.');
+            }
+
+            await deriveAndStoreKeyFromCredentials(password, ownerEmail);
+
+            const restored = await loadStoredKeyForUser(ownerEmail);
+            if (!restored) {
+                throw new Error('Encryption key is not available for current user session.');
+            }
         }
 
         function setVisibility(isPublic) {
@@ -98,8 +124,33 @@
                 }
 
                 const note = await response.json();
+                let noteContent = note.content || '';
+                const ownerEmail = getOwnerEmail();
+
+                const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
+                if (!isOwner && !note.can_edit) {
+                    alert('You have read-only access to this shared note.');
+                    window.location.href = 'sharedNotes.html';
+                    return;
+                }
+
+                if (!isOwner && note.can_edit) {
+                    editingAsSharedCollaborator = true;
+                    shareBtn.style.display = 'none';
+                    shareMenu.style.display = 'none';
+                    document.querySelector('.visibility-toggle').style.display = 'none';
+                }
+
+                if (!note.is_public) {
+                    if (!isOwner) {
+                        throw new Error('Shared editing for encrypted private notes is not available.');
+                    }
+                    await ensurePrivateKeyReady(ownerEmail);
+                    noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                }
+
                 noteTitleInput.value = note.title || '';
-                editorInstance.setData(note.content || '');
+                editorInstance.setData(noteContent);
                 setVisibility(Boolean(note.is_public));
             } catch (error) {
                 console.error('Load note error:', error);
@@ -124,9 +175,104 @@
 
         const shareBtn = document.querySelector('.share-btn');
         const shareMenu = document.getElementById('shareMenu');
+        const shareSearchInput = document.getElementById('shareSearch');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const allowEditShareCheckbox = document.getElementById('allowEditShare');
+        const sendShareBtn = document.querySelector('.send-share');
+
+        let selectedUser = null;
+        let searchTimeout = null;
+        let editingAsSharedCollaborator = false;
 
         shareBtn.addEventListener('click', () => {
-            shareMenu.style.display = shareMenu.style.display === 'block' ? 'none' : 'block';
+            const isOpen = shareMenu.style.display === 'block';
+            shareMenu.style.display = isOpen ? 'none' : 'block';
+            if (!isOpen) {
+                shareSearchInput.focus();
+            }
+        });
+
+        shareSearchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            selectedUser = null;
+            const query = shareSearchInput.value.trim();
+            if (query.length < 2) {
+                searchResultsDiv.innerHTML = '';
+                return;
+            }
+            searchTimeout = setTimeout(() => searchUsers(query), 300);
+        });
+
+        async function searchUsers(query) {
+            try {
+                const response = await fetch(
+                    `http://localhost:8000/auth/users/search?q=${encodeURIComponent(query)}`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                if (!response.ok) throw new Error('Search failed');
+                const users = await response.json();
+                renderUserResults(users);
+            } catch (err) {
+                searchResultsDiv.innerHTML = '<p style="color:red;font-size:13px">Search failed. Try again.</p>';
+            }
+        }
+
+        function renderUserResults(users) {
+            searchResultsDiv.innerHTML = '';
+            if (users.length === 0) {
+                searchResultsDiv.innerHTML = '<p style="font-size:13px;color:#888;padding:4px 0">No users found</p>';
+                return;
+            }
+            users.forEach((user) => {
+                const div = document.createElement('div');
+                div.className = 'user-result';
+                div.textContent = `${user.firstName} ${user.lastName}`;
+                div.title = user.email;
+                div.addEventListener('click', () => {
+                    document.querySelectorAll('#searchResults .user-result').forEach((el) =>
+                        el.classList.remove('selected')
+                    );
+                    div.classList.add('selected');
+                    selectedUser = { id: user.id, name: `${user.firstName} ${user.lastName}` };
+                });
+                searchResultsDiv.appendChild(div);
+            });
+        }
+
+        sendShareBtn.addEventListener('click', async () => {
+            if (!editingNoteId) {
+                alert('Please save the note first before sharing it.');
+                return;
+            }
+            if (!selectedUser) {
+                alert('Please select a user from the search results.');
+                return;
+            }
+            try {
+                const response = await fetch(`http://localhost:8000/notes/${editingNoteId}/share`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        recipient_id: selectedUser.id,
+                        can_edit: allowEditShareCheckbox.checked
+                    })
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Share failed');
+                }
+                alert(`Note shared with ${selectedUser.name}!`);
+                shareMenu.style.display = 'none';
+                selectedUser = null;
+                shareSearchInput.value = '';
+                searchResultsDiv.innerHTML = '';
+                allowEditShareCheckbox.checked = false;
+            } catch (err) {
+                alert('Could not share note: ' + err.message);
+            }
         });
 
         const buttons = document.querySelectorAll('.toggle-btn');
@@ -205,32 +351,40 @@
             let encryptedDek = null;
             let keyVersion = null;
 
-            if (!isPublic) {
-                const encrypted = await encryptNote(content);
-                finalContent = encrypted.ciphertext;
-                encryptedDek = encrypted.encryptedDek;
-                keyVersion = encrypted.keyVersion;
-            }
-
-            const endpoint = editingNoteId
-                ? `http://localhost:8000/notes/${editingNoteId}`
-                : 'http://localhost:8000/notes/';
-            const method = editingNoteId ? 'PUT' : 'POST';
-
             try {
+                if (!isPublic) {
+                    const ownerEmail = getOwnerEmail();
+                    await ensurePrivateKeyReady(ownerEmail);
+
+                    const encryptedPayload = await encryptPrivateNoteForStorage(content, ownerEmail);
+                    finalContent = encryptedPayload.content;
+                    encryptedDek = encryptedPayload.encryptedDek;
+                    keyVersion = encryptedPayload.keyVersion;
+                }
+
+                const endpoint = editingNoteId
+                    ? `http://localhost:8000/notes/${editingNoteId}`
+                    : 'http://localhost:8000/notes/';
+                const method = editingNoteId ? 'PUT' : 'POST';
+
+                const payload = {
+                    title,
+                    content: finalContent
+                };
+
+                if (!editingAsSharedCollaborator) {
+                    payload.is_public = isPublic;
+                    payload.encrypted_dek = encryptedDek;
+                    payload.key_version = keyVersion;
+                }
+
                 const response = await fetch(endpoint, {
                     method,
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        title,
-                        content: finalContent,
-                        is_public: isPublic,
-                        encrypted_dek: encryptedDek,
-                        key_version: keyVersion
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -242,6 +396,20 @@
                 window.location.href = 'library.html';
             } catch (error) {
                 console.error('Save error:', error);
+
+                if (String(error.message || '').includes('Encryption key is not available for current user session')) {
+                    alert('Your encryption session expired. Please log in again to save private notes.');
+                    if (typeof clearStoredKey === 'function') {
+                        clearStoredKey();
+                    }
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('email');
+                    localStorage.removeItem('userEmail');
+                    window.location.href = 'login.html';
+                    return;
+                }
+
                 alert('Error saving note: ' + error.message);
             }
         });

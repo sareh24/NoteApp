@@ -358,6 +358,11 @@ background: linear-gradient(
                                   .user-result:hover {
                                     background: #ddd;
                                   }
+
+                                  .user-result.selected {
+                                    background: #c8b8a2;
+                                    font-weight: 600;
+                                  }
                                   
                                   .send-share {
                                     margin-top: 10px;
@@ -434,6 +439,11 @@ background: linear-gradient(
                     justify-content: space-between;
                     align-items: center;
                     margin-bottom: 20px;
+                  }
+
+                  .note-view-actions {
+                    display: flex;
+                    gap: 10px;
                   }
 
                   .note-view-meta {
