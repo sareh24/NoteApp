@@ -139,7 +139,10 @@
                     },
                     body: JSON.stringify({
                         recipient_id: selectedUser.id,
-                        can_edit: allowEditShareCheckbox.checked
+                        can_edit: allowEditShareCheckbox.checked,
+                        // Placeholder for future asymmetric sharing.
+                        recipient_encrypted_dek: null,
+                        recipient_key_version: null
                     })
                 });
 
@@ -209,15 +212,19 @@
                 const createdAt = new Date(note.created_at).toLocaleString();
                 const visibility = note.is_public ? 'Public' : 'Private';
                 let noteContent = note.content || '<p>No content</p>';
+                const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
 
                 // Decrypt encrypted private notes for the owner.
                 if (!note.is_public) {
-                    const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
-                    await ensurePrivateKeyReady(ownerEmail);
-                    noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                    if (isOwner) {
+                        const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
+                        await ensurePrivateKeyReady(ownerEmail);
+                        noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                    } else {
+                        noteContent = '<p><em>This private note is shared with you, but recipient key unwrap is not implemented yet.</em></p>';
+                    }
                 }
 
-                const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
                 const canEdit = isOwner || Boolean(note.can_edit);
 
                 if (!canEdit || (currentUser && currentUser.is_admin)) {

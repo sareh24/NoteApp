@@ -7,21 +7,11 @@ from dotenv import load_dotenv
 # Always prefer values from backend/.env over stale exported shell variables.
 load_dotenv(override=True)
 
-# Use DATABASE_URL from .env for PostgreSQL, fallback to SQLite
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./notes.db"
-)
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+if not SQLALCHEMY_DATABASE_URL:
+    raise RuntimeError("DATABASE_URL must be set in backend/.env")
 
-# PostgreSQL requires different connection args than SQLite
-if "postgresql" in SQLALCHEMY_DATABASE_URL:
-    engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=False)
-else:
-    # SQLite fallback
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        connect_args={"check_same_thread": False}
-    )
+engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=False)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

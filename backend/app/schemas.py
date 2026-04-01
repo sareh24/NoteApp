@@ -66,6 +66,8 @@ class NoteResponse(BaseModel):
 class ShareNoteRequest(BaseModel):
     recipient_id: UUID
     can_edit: bool = False
+    recipient_encrypted_dek: Optional[str] = None
+    recipient_key_version: Optional[str] = None
 
 class UserSearchResult(BaseModel):
     id: UUID
@@ -75,3 +77,8 @@ class UserSearchResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UserPublicKeyResponse(BaseModel):
+    user_id: UUID
+    public_key: str

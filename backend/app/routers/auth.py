@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
+from uuid import UUID
 from app import models, schemas
 from app.database import get_db
 from app.security import create_access_token, get_current_user
@@ -113,3 +114,30 @@ def search_users(
         .all()
     )
     return users
+
+
+@router.get("/users/{user_id}/public-key", response_model=schemas.UserPublicKeyResponse)
+def get_user_public_key(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user)
+):
+    """Fetch recipient public key for client-side DEK wrapping (placeholder endpoint)."""
+    _ = current_user_email  # Auth guard only; any logged-in user may fetch public keys.
+
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user ID format")
+
+    user = db.query(models.User).filter(models.User.id == user_uuid).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not user.public_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User has not published a public key yet"
+        )
+
+    return {"user_id": user.id, "public_key": user.public_key}

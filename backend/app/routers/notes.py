@@ -331,12 +331,20 @@ async def share_note(
     ).first()
     if existing:
         existing.can_edit = share_data.can_edit
+        existing.recipient_encrypted_dek = share_data.recipient_encrypted_dek
+        existing.recipient_key_version = share_data.recipient_key_version
         db.commit()
         message = "Share permissions updated"
         mode = "can edit" if share_data.can_edit else "read only"
         return {"message": f"{message}: {recipient.firstName} {recipient.lastName} is now {mode}"}
 
-    shared = models.SharedNote(note_id=note_uuid, recipient_id=recipient.id, can_edit=share_data.can_edit)
+    shared = models.SharedNote(
+        note_id=note_uuid,
+        recipient_id=recipient.id,
+        can_edit=share_data.can_edit,
+        recipient_encrypted_dek=share_data.recipient_encrypted_dek,
+        recipient_key_version=share_data.recipient_key_version,
+    )
     db.add(shared)
     db.commit()
     mode = "with edit access" if share_data.can_edit else "as read only"

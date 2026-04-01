@@ -257,7 +257,10 @@
                     },
                     body: JSON.stringify({
                         recipient_id: selectedUser.id,
-                        can_edit: allowEditShareCheckbox.checked
+                        can_edit: allowEditShareCheckbox.checked,
+                        // Placeholder for future asymmetric sharing.
+                        recipient_encrypted_dek: null,
+                        recipient_key_version: null
                     })
                 });
                 if (!response.ok) {
