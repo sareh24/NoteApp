@@ -115,6 +115,62 @@ def get_public_notes(db: Session = Depends(get_db)):
     notes = db.query(models.Note).filter(models.Note.is_public == True).order_by(models.Note.updated_at.desc()).all()
     return notes
 
+
+@router.get("/{note_id}/shares", response_model=List[schemas.SharedRecipientResponse])
+async def get_note_shares(
+    note_id: str,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user)
+):
+    """Return users this note is shared with (owner only)."""
+    user = db.query(models.User).filter(models.User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    try:
+        note_uuid = UUID(note_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid note ID format"
+        )
+
+    note = db.query(models.Note).filter(models.Note.id == note_uuid).first()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found"
+        )
+
+    if note.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the note owner can view sharing details"
+        )
+
+    shared_rows = (
+        db.query(models.SharedNote, models.User)
+        .join(models.User, models.User.id == models.SharedNote.recipient_id)
+        .filter(models.SharedNote.note_id == note_uuid)
+        .order_by(models.SharedNote.shared_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "recipient_id": recipient.id,
+            "firstName": recipient.firstName,
+            "lastName": recipient.lastName,
+            "email": recipient.email,
+            "can_edit": bool(share.can_edit),
+            "shared_at": share.shared_at,
+        }
+        for share, recipient in shared_rows
+    ]
+
 @router.get("/{note_id}", response_model=schemas.NoteResponse)
 async def get_note(
     note_id: str,
@@ -349,3 +405,43 @@ async def share_note(
     db.commit()
     mode = "with edit access" if share_data.can_edit else "as read only"
     return {"message": f"Note shared with {recipient.firstName} {recipient.lastName} {mode}"}
+
+
+@router.delete("/{note_id}/share/{recipient_id}", status_code=status.HTTP_200_OK)
+async def unshare_note(
+    note_id: str,
+    recipient_id: str,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user)
+):
+    """Remove a recipient from a shared note (owner only)."""
+    user = db.query(models.User).filter(models.User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    try:
+        note_uuid = UUID(note_id)
+        recipient_uuid = UUID(recipient_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format")
+
+    note = db.query(models.Note).filter(models.Note.id == note_uuid).first()
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+
+    if note.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the note owner can revoke sharing"
+        )
+
+    shared = db.query(models.SharedNote).filter(
+        models.SharedNote.note_id == note_uuid,
+        models.SharedNote.recipient_id == recipient_uuid
+    ).first()
+    if not shared:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share entry not found")
+
+    db.delete(shared)
+    db.commit()
+    return {"message": "User removed from shared note"}

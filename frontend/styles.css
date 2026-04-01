@@ -461,6 +461,125 @@ background: linear-gradient(
                     line-height: 1.7;
                   }
 
+                  .shared-with-btn {
+                    position: fixed;
+                    left: 18px;
+                    bottom: 18px;
+                    z-index: 1100;
+                    border: 1px solid #3b312a;
+                    background: #f3efe9;
+                    color: #3b312a;
+                    border-radius: 999px;
+                    padding: 8px 14px;
+                    cursor: pointer;
+                    box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+                  }
+
+                  .shared-with-btn:hover {
+                    background: #3b312a;
+                    color: #fff;
+                  }
+
+                  .shared-with-panel {
+                    position: fixed;
+                    left: 18px;
+                    bottom: 64px;
+                    width: min(340px, calc(100vw - 36px));
+                    max-height: 300px;
+                    overflow: auto;
+                    z-index: 1101;
+                    background: #fffdfa;
+                    border: 1px solid #ddd3c8;
+                    border-radius: 12px;
+                    box-shadow: 0 18px 38px rgba(0,0,0,0.25);
+                    padding: 12px;
+                  }
+
+                  .shared-with-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 10px;
+                  }
+
+                  .shared-with-header h4 {
+                    margin: 0;
+                    color: #2a2521;
+                  }
+
+                  .shared-with-close {
+                    border: 1px solid #bdb2a6;
+                    background: #fff;
+                    color: #5a524b;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    cursor: pointer;
+                  }
+
+                  .shared-with-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                  }
+
+                  .shared-with-item {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 12px;
+                    border: 1px solid #efe5d8;
+                    border-radius: 10px;
+                    padding: 8px 10px;
+                    background: #fff;
+                  }
+
+                  .shared-with-name {
+                    color: #2a2521;
+                    font-weight: 600;
+                  }
+
+                  .shared-with-email {
+                    color: #706960;
+                    font-size: 12px;
+                  }
+
+                  .shared-with-pill {
+                    border-radius: 999px;
+                    border: 1px solid #c9bfb3;
+                    padding: 3px 8px;
+                    font-size: 12px;
+                    color: #4b433b;
+                    white-space: nowrap;
+                  }
+
+                  .shared-with-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  }
+
+                  .shared-with-unshare-btn {
+                    border-radius: 999px;
+                    border: 1px solid #a8443a;
+                    background: #fff5f3;
+                    color: #a8443a;
+                    padding: 4px 8px;
+                    font-size: 12px;
+                    cursor: pointer;
+                  }
+
+                  .shared-with-unshare-btn:hover {
+                    background: #a8443a;
+                    color: #fff;
+                  }
+
+                  .shared-with-empty,
+                  .shared-with-error {
+                    margin: 0;
+                    color: #706960;
+                    font-size: 13px;
+                  }
+
 /* User Profile Box */
 .user-profile-box {
     position: fixed;

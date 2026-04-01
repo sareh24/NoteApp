@@ -1,0 +1,13 @@
+Things to do before going live / production deployment
+=======================================================
+
+[ ] CORS: Change allow_origins=["*"] in backend/app/main.py to your actual frontend domain.
+    e.g. allow_origins=["https://yournoteapp.com"]
+
+[ ] SECRET_KEY: Replace the placeholder secret key in backend/app/config.py with a strong random key.
+    Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+
+[ ] DATABASE_URL: Make sure backend/.env points to your production PostgreSQL instance, not localhost.
+
+[ ] HTTPS: Ensure your frontend and backend are both served over HTTPS, not plain HTTP.
+[ ] 2 authenticication part: Add to make it safer in case of password breach

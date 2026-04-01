@@ -33,6 +33,16 @@
         <div id="noteContent" class="note-view-content"></div>
     </div>
 
+    <button id="sharedWithBtn" class="shared-with-btn" type="button">Shared with</button>
+
+    <div id="sharedWithPanel" class="shared-with-panel" style="display:none;">
+        <div class="shared-with-header">
+            <h4>Shared with</h4>
+            <button id="closeSharedPanelBtn" class="shared-with-close" type="button">Close</button>
+        </div>
+        <div id="sharedWithList" class="shared-with-list"></div>
+    </div>
+
     <script>
         const token = localStorage.getItem('token');
         const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
@@ -44,6 +54,10 @@
         const searchResultsDiv = document.getElementById('searchResults');
         const allowEditShareCheckbox = document.getElementById('allowEditShare');
         const sendShareBtn = document.getElementById('sendShareBtn');
+        const sharedWithBtn = document.getElementById('sharedWithBtn');
+        const sharedWithPanel = document.getElementById('sharedWithPanel');
+        const closeSharedPanelBtn = document.getElementById('closeSharedPanelBtn');
+        const sharedWithList = document.getElementById('sharedWithList');
 
         let selectedUser = null;
         let searchTimeout = null;
@@ -70,6 +84,18 @@
             if (!isOpen) {
                 shareSearchInput.focus();
             }
+        });
+
+        sharedWithBtn.addEventListener('click', async () => {
+            const isOpen = sharedWithPanel.style.display === 'block';
+            sharedWithPanel.style.display = isOpen ? 'none' : 'block';
+            if (!isOpen) {
+                await loadSharedWithList();
+            }
+        });
+
+        closeSharedPanelBtn.addEventListener('click', () => {
+            sharedWithPanel.style.display = 'none';
         });
 
         shareSearchInput.addEventListener('input', () => {
@@ -157,10 +183,83 @@
                 searchResultsDiv.innerHTML = '';
                 selectedUser = null;
                 allowEditShareCheckbox.checked = false;
+                if (sharedWithPanel.style.display === 'block') {
+                    await loadSharedWithList();
+                }
             } catch (error) {
                 alert('Could not share note: ' + error.message);
             }
         });
+
+        async function loadSharedWithList() {
+            sharedWithList.innerHTML = '<p class="shared-with-empty">Loading...</p>';
+            try {
+                const response = await fetch(`http://localhost:8000/notes/${noteId}/shares`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Could not load sharing list');
+                }
+
+                const recipients = await response.json();
+                if (!Array.isArray(recipients) || recipients.length === 0) {
+                    sharedWithList.innerHTML = '<p class="shared-with-empty">This note is not shared with anyone yet.</p>';
+                    return;
+                }
+
+                sharedWithList.innerHTML = '';
+                recipients.forEach((recipient) => {
+                    const row = document.createElement('div');
+                    row.className = 'shared-with-item';
+                    const mode = recipient.can_edit ? 'Can edit' : 'Read only';
+                    row.innerHTML = `
+                        <div>
+                            <div class="shared-with-name">${recipient.firstName} ${recipient.lastName}</div>
+                            <div class="shared-with-email">${recipient.email}</div>
+                        </div>
+                        <div class="shared-with-actions">
+                            <span class="shared-with-pill">${mode}</span>
+                            <button type="button" class="shared-with-unshare-btn" data-recipient-id="${recipient.recipient_id}">Unshare</button>
+                        </div>
+                    `;
+                    sharedWithList.appendChild(row);
+                });
+
+                sharedWithList.querySelectorAll('.shared-with-unshare-btn').forEach((button) => {
+                    button.addEventListener('click', async () => {
+                        const recipientId = button.getAttribute('data-recipient-id');
+                        if (!recipientId) return;
+
+                        const ok = window.confirm('Remove this user from shared access?');
+                        if (!ok) return;
+
+                        try {
+                            const response = await fetch(`http://localhost:8000/notes/${noteId}/share/${recipientId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+
+                            if (!response.ok) {
+                                const err = await response.json().catch(() => ({}));
+                                throw new Error(err.detail || 'Could not unshare this note');
+                            }
+
+                            await loadSharedWithList();
+                        } catch (error) {
+                            alert(error.message || 'Could not unshare this note');
+                        }
+                    });
+                });
+            } catch (error) {
+                sharedWithList.innerHTML = '<p class="shared-with-error">Could not load sharing list.</p>';
+            }
+        }
 
         if (currentUser && currentUser.is_admin) {
             document.getElementById('editBtn').style.display = 'none';
@@ -234,6 +333,8 @@
                 if (!isOwner || (currentUser && currentUser.is_admin)) {
                     shareBtn.style.display = 'none';
                     shareMenu.style.display = 'none';
+                    sharedWithBtn.style.display = 'none';
+                    sharedWithPanel.style.display = 'none';
                 }
 
                 document.getElementById('noteTitle').textContent = note.title || 'Untitled Note';

@@ -69,6 +69,15 @@ class ShareNoteRequest(BaseModel):
     recipient_encrypted_dek: Optional[str] = None
     recipient_key_version: Optional[str] = None
 
+
+class SharedRecipientResponse(BaseModel):
+    recipient_id: UUID
+    firstName: str
+    lastName: str
+    email: str
+    can_edit: bool
+    shared_at: datetime
+
 class UserSearchResult(BaseModel):
     id: UUID
     firstName: str
