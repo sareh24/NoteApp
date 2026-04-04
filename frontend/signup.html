@@ -72,6 +72,18 @@
                 localStorage.setItem('token', data.access_token);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 localStorage.setItem('email', data.user.email);
+                localStorage.setItem('userEmail', data.user.email);
+
+                try {
+                    const { ensureProtocolPublicKeyPublished } = await import('./userKeys.js');
+                    await ensureProtocolPublicKeyPublished({
+                        token: data.access_token,
+                        userKey: String(data.user.id || data.user.email),
+                        apiBase: 'http://localhost:8000'
+                    });
+                } catch (protocolError) {
+                    console.warn('Protocol key publish warning:', protocolError);
+                }
                 
                 //alert('Welcome! You are logged in.');
                 window.location.href = 'library.html';

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from uuid import UUID
-from typing import Optional
+from typing import List, Optional
 
 class UserCreate(BaseModel):
     firstName: str
@@ -34,28 +34,62 @@ class LoginResponse(BaseModel):
     message: str
     user: UserResponse
 
+
+class UserPublicKeyUpdateRequest(BaseModel):
+    public_key: str
+
+
+class UserPublicKeyResponse(BaseModel):
+    user_id: UUID
+    public_key: str
+
+
+class NoteKeyPacketPayload(BaseModel):
+    recipient_user_id: UUID
+    gk_version: int
+    enc_gk_b64: str
+
+
+class NoteVersionPayload(BaseModel):
+    version: int
+    gk_version: int
+    content_nonce_b64: str
+    content_ciphertext_b64: str
+    wrapped_dek_b64: str
+
+
+class NoteVersionResponse(NoteVersionPayload):
+    created_at: datetime
+
 class NoteCreate(BaseModel):
+    note_id: Optional[UUID] = None
     title: Optional[str] = "Untitled Note"
-    content: str
+    content: Optional[str] = None
     is_public: bool = False
-    encrypted_dek: Optional[str] = None
-    key_version: Optional[str] = None
+    initial_version: Optional[NoteVersionPayload] = None
+    key_packets: List[NoteKeyPacketPayload] = []
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     is_public: Optional[bool] = None
-    encrypted_dek: Optional[str] = None
-    key_version: Optional[str] = None
+    next_version: Optional[NoteVersionPayload] = None
 
 class NoteResponse(BaseModel):
     id: UUID
     user_id: UUID
     title: str
-    content: str
+    content: Optional[str] = None
     is_public: bool
     encrypted_dek: Optional[str] = None
     key_version: Optional[str] = None
+    uses_protocol: bool = False
+    current_version: int = 0
+    current_gk_version: int = 0
+    latest_version: Optional[NoteVersionResponse] = None
+    my_enc_gk_b64: Optional[str] = None
+    my_gk_version: Optional[int] = None
+    is_owner: bool = False
     can_edit: bool = False
     created_at: datetime
     updated_at: datetime
@@ -66,8 +100,15 @@ class NoteResponse(BaseModel):
 class ShareNoteRequest(BaseModel):
     recipient_id: UUID
     can_edit: bool = False
-    recipient_encrypted_dek: Optional[str] = None
-    recipient_key_version: Optional[str] = None
+    gk_version: int
+    enc_gk_b64: str
+
+
+class RotateGroupKeyRequest(BaseModel):
+    new_gk_version: int
+    update_token_b64: str
+    revoked_recipient_id: Optional[UUID] = None
+    key_packets: List[NoteKeyPacketPayload]
 
 
 class SharedRecipientResponse(BaseModel):
@@ -83,11 +124,7 @@ class UserSearchResult(BaseModel):
     firstName: str
     lastName: str
     email: str
+    has_public_key: bool = False
 
     class Config:
         from_attributes = True
-
-
-class UserPublicKeyResponse(BaseModel):
-    user_id: UUID
-    public_key: str

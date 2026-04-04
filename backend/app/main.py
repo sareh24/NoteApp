@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from app.database import engine, Base, SessionLocal
 from app.routers import auth, notes
 from app import models
@@ -12,6 +13,29 @@ from app.config import (
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_protocol_columns():
+    """Backfill protocol columns on existing databases that predate migrations."""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    with engine.connect() as connection:
+        if "users" in existing_tables:
+            user_columns = {column["name"] for column in inspector.get_columns("users")}
+            if "public_key" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN public_key TEXT"))
+
+        if "notes" in existing_tables:
+            note_columns = {column["name"] for column in inspector.get_columns("notes")}
+            if "uses_protocol" not in note_columns:
+                connection.execute(text("ALTER TABLE notes ADD COLUMN uses_protocol BOOLEAN DEFAULT FALSE"))
+            if "current_version" not in note_columns:
+                connection.execute(text("ALTER TABLE notes ADD COLUMN current_version INTEGER DEFAULT 0"))
+            if "current_gk_version" not in note_columns:
+                connection.execute(text("ALTER TABLE notes ADD COLUMN current_gk_version INTEGER DEFAULT 0"))
+
+        connection.commit()
 
 
 def ensure_default_admin_user():
@@ -42,6 +66,7 @@ def ensure_default_admin_user():
         db.commit()
     finally:
         db.close()
+ensure_protocol_columns()
 ensure_default_admin_user()
 
 app = FastAPI(title="Secure Notes API")

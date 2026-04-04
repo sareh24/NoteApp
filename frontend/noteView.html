@@ -44,8 +44,13 @@
     </div>
 
     <script>
+        const API_BASE = 'http://localhost:8000';
         const token = localStorage.getItem('token');
         const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+        const protocolModulesPromise = Promise.all([
+            import('./userKeys.js'),
+            import('./updatableNotesCrypto.js')
+        ]);
         const params = new URLSearchParams(window.location.search);
         const noteId = params.get('id');
         const shareBtn = document.getElementById('shareBtn');
@@ -59,8 +64,10 @@
         const closeSharedPanelBtn = document.getElementById('closeSharedPanelBtn');
         const sharedWithList = document.getElementById('sharedWithList');
 
+        let loadedNoteRecord = null;
         let selectedUser = null;
         let searchTimeout = null;
+        let sharedRecipientCache = [];
 
         if (!token) {
             window.location.href = 'login.html';
@@ -68,6 +75,54 @@
 
         if (!noteId) {
             window.location.href = 'library.html';
+        }
+
+        function getProtocolUserKey() {
+            const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
+            return String((currentUser && currentUser.id) || ownerEmail || '');
+        }
+
+        async function ensureProtocolReady() {
+            const [userKeysModule, protocolCryptoModule] = await protocolModulesPromise;
+            const keys = await userKeysModule.ensureProtocolPublicKeyPublished({
+                token,
+                userKey: getProtocolUserKey(),
+                apiBase: API_BASE
+            });
+            return { ...keys, protocolCryptoModule };
+        }
+
+        async function fetchUserPublicKey(userId) {
+            const response = await fetch(`${API_BASE}/auth/users/${userId}/public-key`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Recipient has not published a public key yet');
+            }
+
+            const payload = await response.json();
+            return payload.public_key;
+        }
+
+        async function fetchNoteRecord() {
+            const response = await fetch(`${API_BASE}/notes/${noteId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Could not load note');
+            }
+
+            loadedNoteRecord = await response.json();
+            return loadedNoteRecord;
         }
 
         document.getElementById('backBtn').addEventListener('click', () => {
@@ -112,7 +167,7 @@
         async function searchUsers(query) {
             try {
                 const response = await fetch(
-                    `http://localhost:8000/auth/users/search?q=${encodeURIComponent(query)}`,
+                    `${API_BASE}/auth/users/search?q=${encodeURIComponent(query)}`,
                     { headers: { 'Authorization': `Bearer ${token}` } }
                 );
                 if (!response.ok) {
@@ -120,7 +175,7 @@
                 }
                 const users = await response.json();
                 renderUserResults(users);
-            } catch (error) {
+            } catch (_error) {
                 searchResultsDiv.innerHTML = '<p style="color:red;font-size:13px">Search failed. Try again.</p>';
             }
         }
@@ -135,10 +190,20 @@
             users.forEach((user) => {
                 const div = document.createElement('div');
                 div.className = 'user-result';
-                div.textContent = `${user.firstName} ${user.lastName}`;
+                div.textContent = user.has_public_key
+                    ? `${user.firstName} ${user.lastName}`
+                    : `${user.firstName} ${user.lastName} (no public key yet)`;
                 div.title = user.email;
 
+                if (!user.has_public_key) {
+                    div.style.opacity = '0.55';
+                    div.style.cursor = 'not-allowed';
+                }
+
                 div.addEventListener('click', () => {
+                    if (!user.has_public_key) {
+                        return;
+                    }
                     document.querySelectorAll('#searchResults .user-result').forEach((el) =>
                         el.classList.remove('selected')
                     );
@@ -151,24 +216,45 @@
         }
 
         sendShareBtn.addEventListener('click', async () => {
-            if (!selectedUser) {
+            // Capture immediately — selectedUser can be reset to null by the search input
+            // listener during async operations below, causing "Cannot read properties of null"
+            const targetUser = selectedUser;
+            if (!targetUser) {
                 alert('Please select a user from the search results.');
                 return;
             }
 
             try {
-                const response = await fetch(`http://localhost:8000/notes/${noteId}/share`, {
+                const note = loadedNoteRecord || await fetchNoteRecord();
+                if (note.is_public) {
+                    throw new Error('Public notes do not need sharing.');
+                }
+                if (!note.uses_protocol) {
+                    throw new Error('Only protocol-managed private notes can be shared.');
+                }
+
+                const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+                const recipientPublicKey = await fetchUserPublicKey(targetUser.id);
+                const sharePacket = await protocolCryptoModule.createSharePacket({
+                    recipientUserId: targetUser.id,
+                    recipientPublicKeyB64: recipientPublicKey,
+                    gkVersion: note.current_gk_version,
+                    myPublicKeyB64: publicKeyB64,
+                    myPrivateKeyB64: privateKeyB64,
+                    myEncGkB64: note.my_enc_gk_b64,
+                });
+
+                const response = await fetch(`${API_BASE}/notes/${noteId}/share`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
-                        recipient_id: selectedUser.id,
+                        recipient_id: targetUser.id,
                         can_edit: allowEditShareCheckbox.checked,
-                        // Placeholder for future asymmetric sharing.
-                        recipient_encrypted_dek: null,
-                        recipient_key_version: null
+                        gk_version: sharePacket.gk_version,
+                        enc_gk_b64: sharePacket.enc_gk_b64
                     })
                 });
 
@@ -177,7 +263,7 @@
                     throw new Error(err.detail || 'Share failed');
                 }
 
-                alert(`Note shared with ${selectedUser.name}!`);
+                alert(`Note shared with ${targetUser.name}!`);
                 shareMenu.style.display = 'none';
                 shareSearchInput.value = '';
                 searchResultsDiv.innerHTML = '';
@@ -194,7 +280,7 @@
         async function loadSharedWithList() {
             sharedWithList.innerHTML = '<p class="shared-with-empty">Loading...</p>';
             try {
-                const response = await fetch(`http://localhost:8000/notes/${noteId}/shares`, {
+                const response = await fetch(`${API_BASE}/notes/${noteId}/shares`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -206,13 +292,14 @@
                 }
 
                 const recipients = await response.json();
-                if (!Array.isArray(recipients) || recipients.length === 0) {
+                sharedRecipientCache = Array.isArray(recipients) ? recipients : [];
+                if (sharedRecipientCache.length === 0) {
                     sharedWithList.innerHTML = '<p class="shared-with-empty">This note is not shared with anyone yet.</p>';
                     return;
                 }
 
                 sharedWithList.innerHTML = '';
-                recipients.forEach((recipient) => {
+                sharedRecipientCache.forEach((recipient) => {
                     const row = document.createElement('div');
                     row.className = 'shared-with-item';
                     const mode = recipient.can_edit ? 'Can edit' : 'Read only';
@@ -232,31 +319,64 @@
                 sharedWithList.querySelectorAll('.shared-with-unshare-btn').forEach((button) => {
                     button.addEventListener('click', async () => {
                         const recipientId = button.getAttribute('data-recipient-id');
-                        if (!recipientId) return;
+                        if (!recipientId) {
+                            return;
+                        }
 
-                        const ok = window.confirm('Remove this user from shared access?');
-                        if (!ok) return;
+                        const ok = window.confirm('Remove this user from shared access and rotate the group key?');
+                        if (!ok) {
+                            return;
+                        }
 
                         try {
-                            const response = await fetch(`http://localhost:8000/notes/${noteId}/share/${recipientId}`, {
-                                method: 'DELETE',
+                            const note = loadedNoteRecord || await fetchNoteRecord();
+                            const remainingRecipients = sharedRecipientCache.filter(
+                                (recipient) => String(recipient.recipient_id) !== String(recipientId)
+                            );
+                            const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+                            const recipientPublicKeysByUserId = {
+                                [String(currentUser.id)]: publicKeyB64,
+                            };
+
+                            for (const recipient of remainingRecipients) {
+                                recipientPublicKeysByUserId[String(recipient.recipient_id)] = await fetchUserPublicKey(recipient.recipient_id);
+                            }
+
+                            const rotation = await protocolCryptoModule.createGroupKeyRotation({
+                                newGkVersion: note.current_gk_version + 1,
+                                recipientPublicKeysByUserId,
+                                myPublicKeyB64: publicKeyB64,
+                                myPrivateKeyB64: privateKeyB64,
+                                myEncGkB64: note.my_enc_gk_b64,
+                            });
+
+                            const response = await fetch(`${API_BASE}/notes/${noteId}/rotate-group-key`, {
+                                method: 'POST',
                                 headers: {
+                                    'Content-Type': 'application/json',
                                     'Authorization': `Bearer ${token}`
-                                }
+                                },
+                                body: JSON.stringify({
+                                    new_gk_version: rotation.new_gk_version,
+                                    update_token_b64: rotation.update_token_b64,
+                                    revoked_recipient_id: recipientId,
+                                    key_packets: rotation.key_packets
+                                })
                             });
 
                             if (!response.ok) {
                                 const err = await response.json().catch(() => ({}));
-                                throw new Error(err.detail || 'Could not unshare this note');
+                                throw new Error(err.detail || 'Could not rotate the group key');
                             }
 
+                            await fetchNoteRecord();
                             await loadSharedWithList();
                         } catch (error) {
-                            alert(error.message || 'Could not unshare this note');
+                            alert(error.message || 'Could not revoke access');
                         }
                     });
                 });
-            } catch (error) {
+            } catch (_error) {
                 sharedWithList.innerHTML = '<p class="shared-with-error">Could not load sharing list.</p>';
             }
         }
@@ -296,25 +416,22 @@
 
         async function loadNote() {
             try {
-                const response = await fetch(`http://localhost:8000/notes/${noteId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error('Could not load note');
-                }
-
-                const note = await response.json();
+                const note = await fetchNoteRecord();
                 const createdAt = new Date(note.created_at).toLocaleString();
                 const visibility = note.is_public ? 'Public' : 'Private';
-                let noteContent = note.content || '<p>No content</p>';
                 const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
+                let noteContent = note.content || '<p>No content</p>';
 
-                // Decrypt encrypted private notes for the owner.
-                if (!note.is_public) {
+                if (note.uses_protocol && !note.is_public) {
+                    const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+                    noteContent = await protocolCryptoModule.decryptProtocolNote({
+                        noteId: String(note.id),
+                        latestVersion: note.latest_version,
+                        myPublicKeyB64: publicKeyB64,
+                        myPrivateKeyB64: privateKeyB64,
+                        myEncGkB64: note.my_enc_gk_b64,
+                    });
+                } else if (!note.is_public) {
                     if (isOwner) {
                         const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
                         await ensurePrivateKeyReady(ownerEmail);
@@ -330,7 +447,7 @@
                     document.getElementById('editBtn').style.display = 'none';
                 }
 
-                if (!isOwner || (currentUser && currentUser.is_admin)) {
+                if (!isOwner || (currentUser && currentUser.is_admin) || note.is_public) {
                     shareBtn.style.display = 'none';
                     shareMenu.style.display = 'none';
                     sharedWithBtn.style.display = 'none';
@@ -342,7 +459,7 @@
                 document.getElementById('noteContent').innerHTML = noteContent;
             } catch (error) {
                 console.error('View note error:', error);
-                alert('Could not open this note.');
+                alert('Could not open this note: ' + (error.message || error));
                 window.location.href = 'library.html';
             }
         }

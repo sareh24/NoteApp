@@ -113,7 +113,33 @@ def search_users(
         .limit(10)
         .all()
     )
-    return users
+    return [
+        {
+            "id": user.id,
+            "firstName": user.firstName,
+            "lastName": user.lastName,
+            "email": user.email,
+            "has_public_key": bool(user.public_key),
+        }
+        for user in users
+    ]
+
+
+@router.put("/me/public-key", response_model=schemas.UserPublicKeyResponse)
+def upsert_my_public_key(
+    payload: schemas.UserPublicKeyUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user)
+):
+    """Publish or update the authenticated user's public key."""
+    user = db.query(models.User).filter(models.User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.public_key = payload.public_key
+    db.commit()
+    db.refresh(user)
+    return {"user_id": user.id, "public_key": user.public_key}
 
 
 @router.get("/users/{user_id}/public-key", response_model=schemas.UserPublicKeyResponse)

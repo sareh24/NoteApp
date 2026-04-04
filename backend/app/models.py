@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, LargeBinary, Integer, DateTime, ForeignKey, Text, Boolean, Uuid, UniqueConstraint
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Uuid, UniqueConstraint
 from datetime import datetime
 import uuid
 from app.database import Base
@@ -23,12 +23,44 @@ class Note(Base):
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False, default="Untitled Note")
-    content = Column(Text, nullable=False)
+    # Legacy/public content storage. Protocol private notes keep encrypted versions in note_versions.
+    content = Column(Text, nullable=False, default="")
     is_public = Column(Boolean, default=False)
     encrypted_dek = Column(Text, nullable=True)  # only set for private notes
     key_version = Column(String, nullable=True)  # tracks which key was used, for rotation
+    uses_protocol = Column(Boolean, default=False)
+    current_version = Column(Integer, default=0)
+    current_gk_version = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class NoteVersion(Base):
+    __tablename__ = "note_versions"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    note_id = Column(Uuid(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    gk_version = Column(Integer, nullable=False)
+    content_nonce_b64 = Column(Text, nullable=False)
+    content_ciphertext_b64 = Column(Text, nullable=False)
+    wrapped_dek_b64 = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("note_id", "version", name="uq_note_version_number"),)
+
+
+class NoteKeyPacket(Base):
+    __tablename__ = "note_key_packets"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    note_id = Column(Uuid(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
+    recipient_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    gk_version = Column(Integer, nullable=False)
+    enc_gk_b64 = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("note_id", "recipient_id", "gk_version", name="uq_note_recipient_gk_version"),)
 
 class SharedNote(Base):
     __tablename__ = "shared_notes"

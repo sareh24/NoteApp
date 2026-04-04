@@ -52,6 +52,18 @@
                 localStorage.setItem('token', data.access_token);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 localStorage.setItem('email', email);
+                localStorage.setItem('userEmail', email);
+
+                try {
+                    const { ensureProtocolPublicKeyPublished } = await import('./userKeys.js');
+                    await ensureProtocolPublicKeyPublished({
+                        token: data.access_token,
+                        userKey: String(data.user.id || email),
+                        apiBase: 'http://localhost:8000'
+                    });
+                } catch (protocolError) {
+                    console.warn('Protocol key publish warning:', protocolError);
+                }
 
                 // Build and cache user key locally for private-note encryption.
                 // Keep login resilient if crypto setup fails.
@@ -64,8 +76,6 @@
                     alert('Login succeeded, but private-note encryption key setup failed. You may be asked for your password when opening or saving private notes.');
                 }
 
-                localStorage.setItem('userEmail', email);
-                
                 //alert('Login successful! Redirecting to your notes...');
                 window.location.href = 'library.html';
             } catch (error) {

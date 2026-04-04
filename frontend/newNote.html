@@ -43,15 +43,30 @@
     </div>
 
     <script>
-
         let editorInstance;
+        let loadedNoteRecord = null;
+        let selectedUser = null;
+        let searchTimeout = null;
+        let editingAsSharedCollaborator = false;
+
+        const API_BASE = 'http://localhost:8000';
         const token = localStorage.getItem('token');
         const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+        const protocolModulesPromise = Promise.all([
+            import('./userKeys.js'),
+            import('./updatableNotesCrypto.js')
+        ]);
         const params = new URLSearchParams(window.location.search);
         const editingNoteId = params.get('edit');
         const importBtn = document.querySelector('.import-btn');
         const importFile = document.getElementById('importFile');
         const noteTitleInput = document.getElementById('noteTitleInput');
+        const shareBtn = document.querySelector('.share-btn');
+        const shareMenu = document.getElementById('shareMenu');
+        const shareSearchInput = document.getElementById('shareSearch');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const allowEditShareCheckbox = document.getElementById('allowEditShare');
+        const sendShareBtn = document.querySelector('.send-share');
 
         if (!token) {
             window.location.href = 'login.html';
@@ -64,6 +79,53 @@
 
         function getOwnerEmail() {
             return localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
+        }
+
+        function getProtocolUserKey() {
+            return String((currentUser && currentUser.id) || getOwnerEmail() || '');
+        }
+
+        async function ensureProtocolReady() {
+            const [userKeysModule, protocolCryptoModule] = await protocolModulesPromise;
+            const keys = await userKeysModule.ensureProtocolPublicKeyPublished({
+                token,
+                userKey: getProtocolUserKey(),
+                apiBase: API_BASE
+            });
+            return { ...keys, protocolCryptoModule };
+        }
+
+        async function fetchUserPublicKey(userId) {
+            const response = await fetch(`${API_BASE}/auth/users/${userId}/public-key`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Recipient has not published a public key yet');
+            }
+
+            const payload = await response.json();
+            return payload.public_key;
+        }
+
+        async function fetchNoteRecord(noteId) {
+            const response = await fetch(`${API_BASE}/notes/${noteId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to load note');
+            }
+
+            loadedNoteRecord = await response.json();
+            return loadedNoteRecord;
         }
 
         async function ensurePrivateKeyReady(ownerEmail) {
@@ -112,22 +174,10 @@
             document.querySelector('.save-btn').textContent = 'Update';
 
             try {
-                const response = await fetch(`http://localhost:8000/notes/${editingNoteId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to load note');
-                }
-
-                const note = await response.json();
-                let noteContent = note.content || '';
-                const ownerEmail = getOwnerEmail();
-
+                const note = await fetchNoteRecord(editingNoteId);
                 const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
+                let noteContent = note.content || '';
+
                 if (!isOwner && !note.can_edit) {
                     alert('You have read-only access to this shared note.');
                     window.location.href = 'sharedNotes.html';
@@ -138,13 +188,23 @@
                     editingAsSharedCollaborator = true;
                     shareBtn.style.display = 'none';
                     shareMenu.style.display = 'none';
-                    document.querySelector('.visibility-toggle').style.display = 'none';
                 }
 
-                if (!note.is_public) {
+                if (note.uses_protocol && !note.is_public) {
+                    document.querySelector('.visibility-toggle').style.display = 'none';
+                    const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+                    noteContent = await protocolCryptoModule.decryptProtocolNote({
+                        noteId: String(note.id),
+                        latestVersion: note.latest_version,
+                        myPublicKeyB64: publicKeyB64,
+                        myPrivateKeyB64: privateKeyB64,
+                        myEncGkB64: note.my_enc_gk_b64,
+                    });
+                } else if (!note.is_public) {
                     if (!isOwner) {
                         throw new Error('Shared editing for encrypted private notes is not available.');
                     }
+                    const ownerEmail = getOwnerEmail();
                     await ensurePrivateKeyReady(ownerEmail);
                     noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
                 }
@@ -154,7 +214,7 @@
                 setVisibility(Boolean(note.is_public));
             } catch (error) {
                 console.error('Load note error:', error);
-                alert('Could not load note for editing.');
+                alert('Could not load note for editing: ' + (error.message || error));
                 window.location.href = 'library.html';
             }
         }
@@ -172,17 +232,6 @@
             .catch((error) => {
                 console.error(error);
             });
-
-        const shareBtn = document.querySelector('.share-btn');
-        const shareMenu = document.getElementById('shareMenu');
-        const shareSearchInput = document.getElementById('shareSearch');
-        const searchResultsDiv = document.getElementById('searchResults');
-        const allowEditShareCheckbox = document.getElementById('allowEditShare');
-        const sendShareBtn = document.querySelector('.send-share');
-
-        let selectedUser = null;
-        let searchTimeout = null;
-        let editingAsSharedCollaborator = false;
 
         shareBtn.addEventListener('click', () => {
             const isOpen = shareMenu.style.display === 'block';
@@ -206,13 +255,15 @@
         async function searchUsers(query) {
             try {
                 const response = await fetch(
-                    `http://localhost:8000/auth/users/search?q=${encodeURIComponent(query)}`,
+                    `${API_BASE}/auth/users/search?q=${encodeURIComponent(query)}`,
                     { headers: { 'Authorization': `Bearer ${token}` } }
                 );
-                if (!response.ok) throw new Error('Search failed');
+                if (!response.ok) {
+                    throw new Error('Search failed');
+                }
                 const users = await response.json();
                 renderUserResults(users);
-            } catch (err) {
+            } catch (_error) {
                 searchResultsDiv.innerHTML = '<p style="color:red;font-size:13px">Search failed. Try again.</p>';
             }
         }
@@ -223,12 +274,24 @@
                 searchResultsDiv.innerHTML = '<p style="font-size:13px;color:#888;padding:4px 0">No users found</p>';
                 return;
             }
+
             users.forEach((user) => {
                 const div = document.createElement('div');
                 div.className = 'user-result';
-                div.textContent = `${user.firstName} ${user.lastName}`;
+                div.textContent = user.has_public_key
+                    ? `${user.firstName} ${user.lastName}`
+                    : `${user.firstName} ${user.lastName} (no public key yet)`;
                 div.title = user.email;
+
+                if (!user.has_public_key) {
+                    div.style.opacity = '0.55';
+                    div.style.cursor = 'not-allowed';
+                }
+
                 div.addEventListener('click', () => {
+                    if (!user.has_public_key) {
+                        return;
+                    }
                     document.querySelectorAll('#searchResults .user-result').forEach((el) =>
                         el.classList.remove('selected')
                     );
@@ -244,30 +307,50 @@
                 alert('Please save the note first before sharing it.');
                 return;
             }
-            if (!selectedUser) {
+            const targetUser = selectedUser;
+            if (!targetUser) {
                 alert('Please select a user from the search results.');
                 return;
             }
+
             try {
-                const response = await fetch(`http://localhost:8000/notes/${editingNoteId}/share`, {
+                const note = loadedNoteRecord || await fetchNoteRecord(editingNoteId);
+                if (note.is_public) {
+                    throw new Error('Public notes do not need sharing.');
+                }
+                if (!note.uses_protocol) {
+                    throw new Error('Only protocol-managed private notes can be shared.');
+                }
+
+                const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+                const recipientPublicKey = await fetchUserPublicKey(targetUser.id);
+                const sharePacket = await protocolCryptoModule.createSharePacket({
+                    recipientUserId: targetUser.id,
+                    recipientPublicKeyB64: recipientPublicKey,
+                    gkVersion: note.current_gk_version,
+                    myPublicKeyB64: publicKeyB64,
+                    myPrivateKeyB64: privateKeyB64,
+                    myEncGkB64: note.my_enc_gk_b64,
+                });
+
+                const response = await fetch(`${API_BASE}/notes/${editingNoteId}/share`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
-                        recipient_id: selectedUser.id,
+                        recipient_id: targetUser.id,
                         can_edit: allowEditShareCheckbox.checked,
-                        // Placeholder for future asymmetric sharing.
-                        recipient_encrypted_dek: null,
-                        recipient_key_version: null
+                        gk_version: sharePacket.gk_version,
+                        enc_gk_b64: sharePacket.enc_gk_b64
                     })
                 });
                 if (!response.ok) {
                     const err = await response.json();
                     throw new Error(err.detail || 'Share failed');
                 }
-                alert(`Note shared with ${selectedUser.name}!`);
+                alert(`Note shared with ${targetUser.name}!`);
                 shareMenu.style.display = 'none';
                 selectedUser = null;
                 shareSearchInput.value = '';
@@ -347,29 +430,91 @@
 
             const activeBtn = document.querySelector('.toggle-btn.active');
             const isPublic = activeBtn.getAttribute('data-value') === 'public';
-
             const title = noteTitleInput.value.trim() || 'Untitled Note';
 
-            let finalContent = content;
-            let encryptedDek = null;
-            let keyVersion = null;
-
             try {
+                if (!isPublic && loadedNoteRecord && loadedNoteRecord.uses_protocol) {
+                    const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+                    const nextVersion = await protocolCryptoModule.createNextVersionPayload({
+                        noteId: String(loadedNoteRecord.id),
+                        version: loadedNoteRecord.current_version + 1,
+                        gkVersion: loadedNoteRecord.current_gk_version,
+                        plaintext: content,
+                        myPublicKeyB64: publicKeyB64,
+                        myPrivateKeyB64: privateKeyB64,
+                        myEncGkB64: loadedNoteRecord.my_enc_gk_b64,
+                    });
+
+                    const response = await fetch(`${API_BASE}/notes/${editingNoteId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            title,
+                            next_version: nextVersion
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Failed to save note');
+                    }
+
+                    alert('Note updated successfully!');
+                    window.location.href = 'library.html';
+                    return;
+                }
+
+                if (!isPublic && !editingNoteId) {
+                    const { protocolCryptoModule, publicKeyB64 } = await ensureProtocolReady();
+                    const noteId = window.crypto.randomUUID();
+                    const initialPayload = await protocolCryptoModule.createInitialPrivateNotePayload({
+                        noteId,
+                        plaintext: content,
+                        ownerUserId: String(currentUser.id),
+                        ownerPublicKeyB64: publicKeyB64,
+                    });
+
+                    const response = await fetch(`${API_BASE}/notes/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            note_id: noteId,
+                            title,
+                            is_public: false,
+                            initial_version: initialPayload.initialVersion,
+                            key_packets: initialPayload.keyPackets
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Failed to save note');
+                    }
+
+                    alert('Note saved successfully!');
+                    window.location.href = 'library.html';
+                    return;
+                }
+
+                let finalContent = content;
                 if (!isPublic) {
                     const ownerEmail = getOwnerEmail();
                     await ensurePrivateKeyReady(ownerEmail);
 
                     const encryptedPayload = await encryptPrivateNoteForStorage(content, ownerEmail);
                     finalContent = encryptedPayload.content;
-                    encryptedDek = encryptedPayload.encryptedDek;
-                    keyVersion = encryptedPayload.keyVersion;
                 }
 
                 const endpoint = editingNoteId
-                    ? `http://localhost:8000/notes/${editingNoteId}`
-                    : 'http://localhost:8000/notes/';
+                    ? `${API_BASE}/notes/${editingNoteId}`
+                    : `${API_BASE}/notes/`;
                 const method = editingNoteId ? 'PUT' : 'POST';
-
                 const payload = {
                     title,
                     content: finalContent
@@ -377,8 +522,6 @@
 
                 if (!editingAsSharedCollaborator) {
                     payload.is_public = isPublic;
-                    payload.encrypted_dek = encryptedDek;
-                    payload.key_version = keyVersion;
                 }
 
                 const response = await fetch(endpoint, {

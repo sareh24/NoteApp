@@ -37,6 +37,23 @@
             window.location.href = 'login.html';
         }
 
+        // Self-heal stale sessions: ensure this account has a published protocol public key.
+        (async () => {
+            try {
+                if (!user || !token) {
+                    return;
+                }
+                const { ensureProtocolPublicKeyPublished } = await import('./userKeys.js');
+                await ensureProtocolPublicKeyPublished({
+                    token,
+                    userKey: String(user.id || user.email || ''),
+                    apiBase: 'http://localhost:8000'
+                });
+            } catch (error) {
+                console.warn('Protocol key publish skipped:', error);
+            }
+        })();
+
         if (user) {
             document.getElementById('userName').textContent = user.firstName;
             document.getElementById('userEmail').textContent = user.email;
