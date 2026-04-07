@@ -7,6 +7,7 @@
     <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="crypto.js"></script>
+    <script src="sessionUtils.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="newnote">
@@ -102,6 +103,7 @@
                 }
             });
 
+            if (checkAuth(response)) throw new Error('Session expired');
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Recipient has not published a public key yet');
@@ -119,6 +121,7 @@
                 }
             });
 
+            if (checkAuth(response)) throw new Error('Session expired');
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Failed to load note');
@@ -190,8 +193,10 @@
                     shareMenu.style.display = 'none';
                 }
 
+                // Visibility cannot be changed on an existing note — hide the toggle for all edits.
+                document.querySelector('.visibility-toggle').style.display = 'none';
+
                 if (note.uses_protocol && !note.is_public) {
-                    document.querySelector('.visibility-toggle').style.display = 'none';
                     const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
                     noteContent = await protocolCryptoModule.decryptProtocolNote({
                         noteId: String(note.id),
@@ -204,9 +209,14 @@
                     if (!isOwner) {
                         throw new Error('Shared editing for encrypted private notes is not available.');
                     }
-                    const ownerEmail = getOwnerEmail();
-                    await ensurePrivateKeyReady(ownerEmail);
-                    noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                    if (note.encrypted_dek) {
+                        const ownerEmail = getOwnerEmail();
+                        await ensurePrivateKeyReady(ownerEmail);
+                        noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                    } else {
+                        // Note was originally public — content was never encrypted.
+                        noteContent = note.content || '';
+                    }
                 }
 
                 noteTitleInput.value = note.title || '';

@@ -82,8 +82,11 @@ def serialize_note(
     latest_version = get_latest_version(db, note) if include_latest_version and db else None
     is_owner = bool(current_user and note.user_id == current_user.id)
     my_packet = None
+    my_share = None
     if db and current_user and note.uses_protocol and not note.is_public and note.current_gk_version > 0:
         my_packet = get_key_packet(db, note.id, current_user.id, note.current_gk_version)
+    if db and current_user and not is_owner:
+        my_share = get_shared_access(db, note.id, current_user.id)
 
     content = note.content
     if note.uses_protocol and not note.is_public:
@@ -100,9 +103,12 @@ def serialize_note(
         "uses_protocol": bool(note.uses_protocol),
         "current_version": note.current_version or 0,
         "current_gk_version": note.current_gk_version or 0,
+        "rotation_due": bool(note.rotation_due),
         "latest_version": serialize_note_version(latest_version),
         "my_enc_gk_b64": my_packet.enc_gk_b64 if my_packet else None,
         "my_gk_version": my_packet.gk_version if my_packet else None,
+        "my_fingerprint_b64": my_packet.fingerprint_b64 if my_packet else None,
+        "my_is_confidential": bool(my_share.is_confidential) if my_share else False,
         "is_owner": is_owner,
         "can_edit": can_edit,
         "created_at": note.created_at,
@@ -172,6 +178,8 @@ async def create_note(
         uses_protocol=True,
         current_version=1,
         current_gk_version=1,
+        rotation_due=False,
+        last_gk_rotated_at=datetime.utcnow(),
     )
     db.add(new_note)
     db.flush()
@@ -433,12 +441,14 @@ async def share_note(
     existing_share = get_shared_access(db, note_uuid, recipient.id)
     if existing_share:
         existing_share.can_edit = share_data.can_edit
+        existing_share.is_confidential = share_data.is_confidential
     else:
-        db.add(models.SharedNote(note_id=note_uuid, recipient_id=recipient.id, can_edit=share_data.can_edit))
+        db.add(models.SharedNote(note_id=note_uuid, recipient_id=recipient.id, can_edit=share_data.can_edit, is_confidential=share_data.is_confidential))
 
     existing_packet = get_key_packet(db, note_uuid, recipient.id, share_data.gk_version)
     if existing_packet:
         existing_packet.enc_gk_b64 = share_data.enc_gk_b64
+        existing_packet.fingerprint_b64 = share_data.fingerprint_b64
     else:
         db.add(
             models.NoteKeyPacket(
@@ -446,6 +456,7 @@ async def share_note(
                 recipient_id=recipient.id,
                 gk_version=share_data.gk_version,
                 enc_gk_b64=share_data.enc_gk_b64,
+                fingerprint_b64=share_data.fingerprint_b64,
             )
         )
 
@@ -519,13 +530,58 @@ async def rotate_group_key(
                 recipient_id=packet.recipient_user_id,
                 gk_version=packet.gk_version,
                 enc_gk_b64=packet.enc_gk_b64,
+                fingerprint_b64=packet.fingerprint_b64,
             )
         )
 
     note.current_gk_version = payload.new_gk_version
+    note.rotation_due = False
+    note.last_gk_rotated_at = datetime.utcnow()
     note.updated_at = datetime.utcnow()
     db.commit()
     return {"message": "Group key rotated successfully", "gk_version": note.current_gk_version}
+
+
+@router.post("/detect-fingerprint", status_code=status.HTTP_200_OK)
+async def detect_fingerprint_global(
+    payload: schemas.DetectFingerprintRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user),
+):
+    """Search ALL notes owned by the current user for a matching fingerprint."""
+    user = get_user_or_404(db, current_user_email)
+
+    owned_note_ids = (
+        db.query(models.Note.id)
+        .filter(models.Note.user_id == user.id, models.Note.uses_protocol == True)
+        .subquery()
+    )
+
+    row = (
+        db.query(models.NoteKeyPacket, models.User, models.Note)
+        .join(models.User, models.User.id == models.NoteKeyPacket.recipient_id)
+        .join(models.Note, models.Note.id == models.NoteKeyPacket.note_id)
+        .filter(
+            models.NoteKeyPacket.note_id.in_(owned_note_ids),
+            models.NoteKeyPacket.fingerprint_b64 != None,
+            models.NoteKeyPacket.fingerprint_b64 == payload.fingerprint_b64,
+        )
+        .first()
+    )
+
+    if row:
+        packet, recipient, note = row
+        return {
+            "found": True,
+            "note_id": note.id,
+            "note_title": note.title,
+            "recipient_id": recipient.id,
+            "firstName": recipient.firstName,
+            "lastName": recipient.lastName,
+            "email": recipient.email,
+        }
+
+    return {"found": False}
 
 
 @router.delete("/{note_id}/share/{recipient_id}", status_code=status.HTTP_400_BAD_REQUEST)

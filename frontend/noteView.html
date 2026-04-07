@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>View Note</title>
     <script src="crypto.js"></script>
+    <script src="sessionUtils.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="newnote">
@@ -12,7 +13,7 @@
         <div class="note-view-topbar">
             <button id="backBtn" class="exit-btn" type="button">Back</button>
             <div class="note-view-actions">
-                <button id="shareBtn" class="save-btn" type="button">Share</button>
+<button id="shareBtn" class="save-btn" type="button">Share</button>
                 <button id="editBtn" class="save-btn" type="button">Edit</button>
             </div>
         </div>
@@ -23,6 +24,9 @@
             <div id="searchResults" class="search-results"></div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;">
                 <input type="checkbox" id="allowEditShare"> Allow this user to edit
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px;">
+                <input type="checkbox" id="confidentialShare"> Mark as confidential (watermarks every paragraph)
             </label>
             <button class="send-share" type="button" id="sendShareBtn">Send your Note</button>
         </div>
@@ -58,6 +62,7 @@
         const shareSearchInput = document.getElementById('shareSearch');
         const searchResultsDiv = document.getElementById('searchResults');
         const allowEditShareCheckbox = document.getElementById('allowEditShare');
+        const confidentialShareCheckbox = document.getElementById('confidentialShare');
         const sendShareBtn = document.getElementById('sendShareBtn');
         const sharedWithBtn = document.getElementById('sharedWithBtn');
         const sharedWithPanel = document.getElementById('sharedWithPanel');
@@ -68,6 +73,7 @@
         let selectedUser = null;
         let searchTimeout = null;
         let sharedRecipientCache = [];
+        let rotationAttempted = false;
 
         if (!token) {
             window.location.href = 'login.html';
@@ -99,6 +105,7 @@
                 }
             });
 
+            if (checkAuth(response)) throw new Error('Session expired');
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Recipient has not published a public key yet');
@@ -116,6 +123,7 @@
                 }
             });
 
+            if (checkAuth(response)) throw new Error('Session expired');
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Could not load note');
@@ -129,7 +137,7 @@
             window.location.href = 'library.html';
         });
 
-        document.getElementById('editBtn').addEventListener('click', () => {
+document.getElementById('editBtn').addEventListener('click', () => {
             window.location.href = `newNote.html?edit=${noteId}`;
         });
 
@@ -244,6 +252,10 @@
                     myEncGkB64: note.my_enc_gk_b64,
                 });
 
+                // Generate a unique fingerprint for this recipient's copy
+                const fpBytes = crypto.getRandomValues(new Uint8Array(8));
+                const fingerprintB64 = btoa(String.fromCharCode(...fpBytes));
+
                 const response = await fetch(`${API_BASE}/notes/${noteId}/share`, {
                     method: 'POST',
                     headers: {
@@ -253,8 +265,10 @@
                     body: JSON.stringify({
                         recipient_id: targetUser.id,
                         can_edit: allowEditShareCheckbox.checked,
+                        is_confidential: confidentialShareCheckbox.checked,
                         gk_version: sharePacket.gk_version,
-                        enc_gk_b64: sharePacket.enc_gk_b64
+                        enc_gk_b64: sharePacket.enc_gk_b64,
+                        fingerprint_b64: fingerprintB64,
                     })
                 });
 
@@ -269,6 +283,7 @@
                 searchResultsDiv.innerHTML = '';
                 selectedUser = null;
                 allowEditShareCheckbox.checked = false;
+                confidentialShareCheckbox.checked = false;
                 if (sharedWithPanel.style.display === 'block') {
                     await loadSharedWithList();
                 }
@@ -414,12 +429,117 @@
             }
         }
 
+        // ── Watermarking ────────────────────────────────────────────────────────
+        // Inserts a small visible attribution mark at the end of every paragraph
+        // so the recipient's identity appears in any leaked copy.
+        function addWatermark(html, recipientName) {
+            const mark = `<span style="color:#ccc;font-size:9px;font-style:italic;user-select:text;"> — ${recipientName}</span>`;
+            return html.replace(/<\/p>/gi, mark + '</p>');
+        }
+
+        // ── Fingerprinting helpers ──────────────────────────────────────────────
+        // Embeds a recipient-specific fingerprint as invisible Unicode zero-width
+        // characters inside the rendered HTML. U+200C = bit 0, U+200D = bit 1.
+        // U+FEFF acts as start/end markers so the sequence can be extracted later.
+        // Marker: two consecutive zero-width spaces (U+200B U+200B).
+        // Bits encoded as U+200C (0) or U+200D (1).
+        const FP_MARKER = '\u200B\u200B';
+
+        function embedFingerprint(html, fingerprintB64) {
+            const bytes = Uint8Array.from(atob(fingerprintB64), c => c.charCodeAt(0));
+            let hidden = FP_MARKER; // start marker
+            for (const byte of bytes) {
+                for (let bit = 7; bit >= 0; bit--) {
+                    hidden += (byte >> bit) & 1 ? '\u200D' : '\u200C';
+                }
+            }
+            hidden += FP_MARKER; // end marker
+            // Insert after every block-level opening tag so any partial copy still carries the fingerprint
+            return html.replace(/(<(?:p|div|h[1-6]|li|blockquote|section|article)[^>]*>)/gi, '$1' + hidden);
+        }
+
+        function extractFingerprint(text) {
+            const start = text.indexOf(FP_MARKER);
+            if (start === -1) return null;
+            const end = text.indexOf(FP_MARKER, start + FP_MARKER.length);
+            if (end === -1) return null;
+            const bits = Array.from(text.slice(start + FP_MARKER.length, end))
+                .map(c => c === '\u200D' ? '1' : c === '\u200C' ? '0' : null)
+                .filter(b => b !== null)
+                .join('');
+            if (bits.length < 8) return null;
+            const byteArr = [];
+            for (let i = 0; i + 8 <= bits.length; i += 8) {
+                byteArr.push(parseInt(bits.slice(i, i + 8), 2));
+            }
+            return btoa(String.fromCharCode(...byteArr));
+        }
+
+        // Triggered when the server has flagged rotation_due = true on this note.
+        // Fetches all current recipients, computes a new GK + update token, and posts to
+        // /rotate-group-key — the server re-wraps all enc_dek values without seeing plaintext.
+        async function performScheduledRotation(note) {
+            try {
+                const { protocolCryptoModule, publicKeyB64, privateKeyB64 } = await ensureProtocolReady();
+
+                const sharesRes = await fetch(`${API_BASE}/notes/${noteId}/shares`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!sharesRes.ok) return false;
+                const recipients = await sharesRes.json();
+
+                const recipientPublicKeysByUserId = { [String(currentUser.id)]: publicKeyB64 };
+                for (const recipient of recipients) {
+                    try {
+                        recipientPublicKeysByUserId[String(recipient.recipient_id)] =
+                            await fetchUserPublicKey(recipient.recipient_id);
+                    } catch (_e) { /* skip recipients without public keys */ }
+                }
+
+                const rotation = await protocolCryptoModule.createGroupKeyRotation({
+                    newGkVersion: note.current_gk_version + 1,
+                    recipientPublicKeysByUserId,
+                    myPublicKeyB64: publicKeyB64,
+                    myPrivateKeyB64: privateKeyB64,
+                    myEncGkB64: note.my_enc_gk_b64,
+                });
+
+                const rotateRes = await fetch(`${API_BASE}/notes/${noteId}/rotate-group-key`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        new_gk_version: rotation.new_gk_version,
+                        update_token_b64: rotation.update_token_b64,
+                        key_packets: rotation.key_packets,
+                    })
+                });
+
+                return rotateRes.ok;
+            } catch (_e) {
+                return false; // rotation failure is silent — note still loads
+            }
+        }
+
         async function loadNote() {
             try {
                 const note = await fetchNoteRecord();
+                const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
+
+                // If the server has scheduled a rotation and this is the owner's session,
+                // perform it now before decrypting so the new GK is in effect.
+                if (!rotationAttempted && note.rotation_due && isOwner && note.uses_protocol && !note.is_public) {
+                    rotationAttempted = true;
+                    const rotated = await performScheduledRotation(note);
+                    if (rotated) {
+                        return loadNote(); // re-fetch with new GK in place
+                    }
+                }
+
                 const createdAt = new Date(note.created_at).toLocaleString();
                 const visibility = note.is_public ? 'Public' : 'Private';
-                const isOwner = currentUser && String(currentUser.id) === String(note.user_id);
                 let noteContent = note.content || '<p>No content</p>';
 
                 if (note.uses_protocol && !note.is_public) {
@@ -431,11 +551,25 @@
                         myPrivateKeyB64: privateKeyB64,
                         myEncGkB64: note.my_enc_gk_b64,
                     });
+                    // Embed recipient fingerprint invisibly so leaks can be traced.
+                    // The owner has no fingerprint (my_fingerprint_b64 is null for them).
+                    if (!isOwner && note.my_fingerprint_b64) {
+                        noteContent = embedFingerprint(noteContent, note.my_fingerprint_b64);
+                    }
+                    // If the owner marked this share as confidential, add visible watermark.
+                    if (!isOwner && note.my_is_confidential && currentUser) {
+                        noteContent = addWatermark(noteContent, `${currentUser.firstName} ${currentUser.lastName}`);
+                    }
                 } else if (!note.is_public) {
                     if (isOwner) {
-                        const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
-                        await ensurePrivateKeyReady(ownerEmail);
-                        noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                        if (!note.encrypted_dek) {
+                            // Note was originally public and converted to private — content was never encrypted.
+                            noteContent = note.content || '<p>No content</p>';
+                        } else {
+                            const ownerEmail = localStorage.getItem('userEmail') || (currentUser && currentUser.email) || '';
+                            await ensurePrivateKeyReady(ownerEmail);
+                            noteContent = await decryptPrivateNoteFromRecord(note, ownerEmail);
+                        }
                     } else {
                         noteContent = '<p><em>This private note is shared with you, but recipient key unwrap is not implemented yet.</em></p>';
                     }

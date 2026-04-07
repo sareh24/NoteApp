@@ -48,6 +48,7 @@ class NoteKeyPacketPayload(BaseModel):
     recipient_user_id: UUID
     gk_version: int
     enc_gk_b64: str
+    fingerprint_b64: Optional[str] = None
 
 
 class NoteVersionPayload(BaseModel):
@@ -86,9 +87,12 @@ class NoteResponse(BaseModel):
     uses_protocol: bool = False
     current_version: int = 0
     current_gk_version: int = 0
+    rotation_due: bool = False
     latest_version: Optional[NoteVersionResponse] = None
     my_enc_gk_b64: Optional[str] = None
     my_gk_version: Optional[int] = None
+    my_fingerprint_b64: Optional[str] = None
+    my_is_confidential: bool = False
     is_owner: bool = False
     can_edit: bool = False
     created_at: datetime
@@ -100,8 +104,10 @@ class NoteResponse(BaseModel):
 class ShareNoteRequest(BaseModel):
     recipient_id: UUID
     can_edit: bool = False
+    is_confidential: bool = False
     gk_version: int
     enc_gk_b64: str
+    fingerprint_b64: Optional[str] = None
 
 
 class RotateGroupKeyRequest(BaseModel):
@@ -109,6 +115,10 @@ class RotateGroupKeyRequest(BaseModel):
     update_token_b64: str
     revoked_recipient_id: Optional[UUID] = None
     key_packets: List[NoteKeyPacketPayload]
+
+
+class DetectFingerprintRequest(BaseModel):
+    fingerprint_b64: str
 
 
 class SharedRecipientResponse(BaseModel):

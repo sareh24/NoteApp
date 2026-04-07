@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shared With Me</title>
     <script src="crypto.js"></script>
+    <script src="sessionUtils.js"></script>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -84,6 +85,7 @@
                     }
                 });
 
+                if (checkAuth(response)) return;
                 if (!response.ok) {
                     throw new Error('Failed to fetch shared notes');
                 }
@@ -109,7 +111,7 @@
             container.innerHTML = notes.map((note) => {
                 let preview = '';
                 if (!note.is_public && (note.uses_protocol || (typeof isEncryptedPayload === 'function' && isEncryptedPayload(note.content || '')))) {
-                    preview = '[Encrypted private note]';
+                    preview = '';
                 } else {
                     const tempDiv = document.createElement('div');
                     tempDiv.innerHTML = note.content || '';
