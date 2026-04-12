@@ -282,3 +282,19 @@ async function decryptPrivateNoteFromRecord(noteRecord, ownerEmail) {
     const dek = await unwrapDataEncryptionKey(encryptedDek, kek);
     return decryptNote(unwrapEncryptedPayload(rawContent), dek);
 }
+
+// Allow Jest (Node.js) to import the pure, side-effect-free helpers for unit testing.
+// The crypto-API functions are excluded here — they require Web Crypto and a browser context.
+if (typeof module !== "undefined") {
+    module.exports = {
+        bytesToBase64,
+        base64ToBytes,
+        isEncryptedPayload,
+        wrapEncryptedPayload,
+        unwrapEncryptedPayload,
+        isEnvelopeEncryptedPayload,
+        isLegacyEncryptedPayload,
+        LEGACY_CONTENT_PREFIX,
+        ENVELOPE_CONTENT_PREFIX,
+    };
+}
