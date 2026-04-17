@@ -95,6 +95,8 @@ class NoteResponse(BaseModel):
     my_is_confidential: bool = False
     is_owner: bool = False
     can_edit: bool = False
+    author_name: Optional[str] = None
+    author_email: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     

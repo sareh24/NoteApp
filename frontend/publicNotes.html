@@ -118,6 +118,8 @@
                     day: 'numeric'
                 });
 
+                const authorLabel = note.author_name || note.author_email || 'Unknown';
+
                 return `
                     <div class="notes-container">
                         <div class="note-card clickable-card" data-note-id="${note.id}">
@@ -126,7 +128,7 @@
                             <div class="note-content">
                                 <h4>${note.title || 'Untitled Note'}</h4>
                                 <p>${preview}</p>
-                                <small style="color: #888; font-size: 0.85rem;">${formattedDate}</small>
+                                <small style="color: #888; font-size: 0.85rem;">${formattedDate} &middot; By ${authorLabel}</small>
                             </div>
                         </div>
                     </div>

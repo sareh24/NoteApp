@@ -92,7 +92,7 @@ def serialize_note(
     if note.uses_protocol and not note.is_public:
         content = None
 
-    return {
+    result = {
         "id": note.id,
         "user_id": note.user_id,
         "title": note.title,
@@ -111,9 +111,19 @@ def serialize_note(
         "my_is_confidential": bool(my_share.is_confidential) if my_share else False,
         "is_owner": is_owner,
         "can_edit": can_edit,
+        "author_name": None,
+        "author_email": None,
         "created_at": note.created_at,
         "updated_at": note.updated_at,
     }
+
+    if db and note.is_public:
+        author = db.query(models.User).filter(models.User.id == note.user_id).first()
+        if author:
+            result["author_name"] = author.firstName
+            result["author_email"] = author.email
+
+    return result
 
 
 def validate_key_packets(key_packets: List[schemas.NoteKeyPacketPayload], expected_gk_version: int) -> None:
@@ -264,7 +274,7 @@ async def get_shared_notes(
 @router.get("/public", response_model=List[schemas.NoteResponse])
 def get_public_notes(db: Session = Depends(get_db)):
     notes = db.query(models.Note).filter(models.Note.is_public == True).order_by(models.Note.updated_at.desc()).all()
-    return [serialize_note(note) for note in notes]
+    return [serialize_note(note, db=db) for note in notes]
 
 
 @router.get("/{note_id}/shares", response_model=List[schemas.SharedRecipientResponse])
