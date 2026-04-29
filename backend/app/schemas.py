@@ -92,7 +92,6 @@ class NoteResponse(BaseModel):
     my_enc_gk_b64: Optional[str] = None
     my_gk_version: Optional[int] = None
     my_fingerprint_b64: Optional[str] = None
-    my_is_confidential: bool = False
     is_owner: bool = False
     can_edit: bool = False
     author_name: Optional[str] = None
@@ -106,7 +105,6 @@ class NoteResponse(BaseModel):
 class ShareNoteRequest(BaseModel):
     recipient_id: UUID
     can_edit: bool = False
-    is_confidential: bool = False
     gk_version: int
     enc_gk_b64: str
     fingerprint_b64: Optional[str] = None

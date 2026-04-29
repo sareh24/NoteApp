@@ -25,9 +25,6 @@
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;">
                 <input type="checkbox" id="allowEditShare"> Allow this user to edit
             </label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px;">
-                <input type="checkbox" id="confidentialShare"> Mark as confidential (watermarks every paragraph)
-            </label>
             <button class="send-share" type="button" id="sendShareBtn">Send your Note</button>
         </div>
 
@@ -62,7 +59,6 @@
         const shareSearchInput = document.getElementById('shareSearch');
         const searchResultsDiv = document.getElementById('searchResults');
         const allowEditShareCheckbox = document.getElementById('allowEditShare');
-        const confidentialShareCheckbox = document.getElementById('confidentialShare');
         const sendShareBtn = document.getElementById('sendShareBtn');
         const sharedWithBtn = document.getElementById('sharedWithBtn');
         const sharedWithPanel = document.getElementById('sharedWithPanel');
@@ -265,7 +261,6 @@ document.getElementById('editBtn').addEventListener('click', () => {
                     body: JSON.stringify({
                         recipient_id: targetUser.id,
                         can_edit: allowEditShareCheckbox.checked,
-                        is_confidential: confidentialShareCheckbox.checked,
                         gk_version: sharePacket.gk_version,
                         enc_gk_b64: sharePacket.enc_gk_b64,
                         fingerprint_b64: fingerprintB64,
@@ -283,7 +278,6 @@ document.getElementById('editBtn').addEventListener('click', () => {
                 searchResultsDiv.innerHTML = '';
                 selectedUser = null;
                 allowEditShareCheckbox.checked = false;
-                confidentialShareCheckbox.checked = false;
                 if (sharedWithPanel.style.display === 'block') {
                     await loadSharedWithList();
                 }
@@ -429,14 +423,6 @@ document.getElementById('editBtn').addEventListener('click', () => {
             }
         }
 
-        // ── Watermarking ────────────────────────────────────────────────────────
-        // Inserts a small visible attribution mark at the end of every paragraph
-        // so the recipient's identity appears in any leaked copy.
-        function addWatermark(html, recipientName) {
-            const mark = `<span style="color:#ccc;font-size:9px;font-style:italic;user-select:text;"> — ${recipientName}</span>`;
-            return html.replace(/<\/p>/gi, mark + '</p>');
-        }
-
         // ── Fingerprinting helpers ──────────────────────────────────────────────
         // Embeds a recipient-specific fingerprint as invisible Unicode zero-width
         // characters inside the rendered HTML. U+200C = bit 0, U+200D = bit 1.
@@ -555,10 +541,6 @@ document.getElementById('editBtn').addEventListener('click', () => {
                     // The owner has no fingerprint (my_fingerprint_b64 is null for them).
                     if (!isOwner && note.my_fingerprint_b64) {
                         noteContent = embedFingerprint(noteContent, note.my_fingerprint_b64);
-                    }
-                    // If the owner marked this share as confidential, add visible watermark.
-                    if (!isOwner && note.my_is_confidential && currentUser) {
-                        noteContent = addWatermark(noteContent, `${currentUser.firstName} ${currentUser.lastName}`);
                     }
                 } else if (!note.is_public) {
                     if (isOwner) {

@@ -54,11 +54,6 @@ def ensure_protocol_columns():
             if "fingerprint_b64" not in packet_columns:
                 connection.execute(text("ALTER TABLE note_key_packets ADD COLUMN fingerprint_b64 TEXT"))
 
-        if "shared_notes" in existing_tables:
-            shared_columns = {column["name"] for column in inspector.get_columns("shared_notes")}
-            if "is_confidential" not in shared_columns:
-                connection.execute(text("ALTER TABLE shared_notes ADD COLUMN is_confidential BOOLEAN DEFAULT FALSE"))
-
         connection.commit()
 
 

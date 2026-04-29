@@ -108,7 +108,6 @@ def serialize_note(
         "my_enc_gk_b64": my_packet.enc_gk_b64 if my_packet else None,
         "my_gk_version": my_packet.gk_version if my_packet else None,
         "my_fingerprint_b64": my_packet.fingerprint_b64 if my_packet else None,
-        "my_is_confidential": bool(my_share.is_confidential) if my_share else False,
         "is_owner": is_owner,
         "can_edit": can_edit,
         "author_name": None,
@@ -451,9 +450,8 @@ async def share_note(
     existing_share = get_shared_access(db, note_uuid, recipient.id)
     if existing_share:
         existing_share.can_edit = share_data.can_edit
-        existing_share.is_confidential = share_data.is_confidential
     else:
-        db.add(models.SharedNote(note_id=note_uuid, recipient_id=recipient.id, can_edit=share_data.can_edit, is_confidential=share_data.is_confidential))
+        db.add(models.SharedNote(note_id=note_uuid, recipient_id=recipient.id, can_edit=share_data.can_edit))
 
     existing_packet = get_key_packet(db, note_uuid, recipient.id, share_data.gk_version)
     if existing_packet:

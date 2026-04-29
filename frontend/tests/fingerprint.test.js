@@ -5,7 +5,6 @@
  * Covers:
  *   - embedFingerprint()   — encodes bytes as zero-width chars inside HTML
  *   - extractFingerprint() — decodes the hidden bits back to base64
- *   - addWatermark()       — injects visible recipient name into paragraphs
  *   - round-trip property  — embed then extract always recovers the original
  */
 
@@ -13,7 +12,7 @@
 global.atob = (b64) => Buffer.from(b64, "base64").toString("binary");
 global.btoa = (bin) => Buffer.from(bin, "binary").toString("base64");
 
-const { FP_MARKER, embedFingerprint, extractFingerprint, addWatermark } =
+const { FP_MARKER, embedFingerprint, extractFingerprint } =
     require("../fingerprint");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -223,70 +222,5 @@ describe("round-trip: embed then extract", () => {
         const plain_a = innerText(embedFingerprint("<p>x</p>", b64a));
         const plain_b = innerText(embedFingerprint("<p>x</p>", b64b));
         expect(extractFingerprint(plain_a)).not.toBe(extractFingerprint(plain_b));
-    });
-});
-
-// ── addWatermark ──────────────────────────────────────────────────────────────
-
-describe("addWatermark", () => {
-    test("returns a string", () => {
-        expect(typeof addWatermark("<p>Hi</p>", "Alice")).toBe("string");
-    });
-
-    test("injects recipient name before </p>", () => {
-        const result = addWatermark("<p>Hello</p>", "Alice Smith");
-        expect(result).toContain("Alice Smith");
-        expect(result).toContain("</p>");
-        // Name appears before the closing tag
-        const namePos = result.indexOf("Alice Smith");
-        const closePos = result.indexOf("</p>");
-        expect(namePos).toBeLessThan(closePos);
-    });
-
-    test("watermarks every paragraph", () => {
-        const html = "<p>First</p><p>Second</p><p>Third</p>";
-        const result = addWatermark(html, "Bob Jones");
-        const occurrences = (result.match(/Bob Jones/g) || []).length;
-        expect(occurrences).toBe(3);
-    });
-
-    test("preserves original text content", () => {
-        const result = addWatermark("<p>Original text</p>", "Alice");
-        expect(result).toContain("Original text");
-    });
-
-    test("does not alter non-paragraph tags", () => {
-        const html = "<div>Div content</div><p>Para</p>";
-        const result = addWatermark(html, "Alice");
-        expect(result).toContain("<div>Div content</div>");
-    });
-
-    test("is case-insensitive for </P> variants", () => {
-        const result = addWatermark("<p>Text</P>", "Alice");
-        expect(result).toContain("Alice");
-    });
-
-    test("returns unchanged HTML when there are no paragraphs", () => {
-        const html = "<div>No paragraphs here</div>";
-        const result = addWatermark(html, "Alice");
-        expect(result).toBe(html);
-    });
-
-    test("watermark span has expected inline style attributes", () => {
-        const result = addWatermark("<p>x</p>", "Alice");
-        expect(result).toContain("font-size:9px");
-        expect(result).toContain("color:#ccc");
-        expect(result).toContain("font-style:italic");
-    });
-
-    test("different recipient names produce different output", () => {
-        const html = "<p>Text</p>";
-        expect(addWatermark(html, "Alice")).not.toBe(addWatermark(html, "Bob"));
-    });
-
-    test("handles special HTML characters in recipient name safely", () => {
-        // Should embed name literally (not escape — consistent with current impl)
-        const result = addWatermark("<p>x</p>", "O'Brien");
-        expect(result).toContain("O'Brien");
     });
 });

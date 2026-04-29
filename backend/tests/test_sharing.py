@@ -146,24 +146,6 @@ class TestShareNote:
         resp = _share_note(client, owner_h, note["id"], recip["id"], gk_version=99)
         assert resp.status_code == 400
 
-    def test_confidential_flag_stored(self, client):
-        """Sharing with is_confidential=True should store the flag."""
-        _, owner, owner_h = _register_and_login(client)
-        _, recip, recip_h = _register_and_login(client)
-        note = _create_private_note(client, owner_h, owner["id"])
-        resp = client.post(f"/notes/{note['id']}/share", json={
-            "recipient_id": recip["id"],
-            "can_edit": False,
-            "is_confidential": True,
-            "gk_version": 1,
-            "enc_gk_b64": _b64(48),
-        }, headers=owner_h)
-        assert resp.status_code == 200
-        # Recipient fetching the note should see my_is_confidential=True
-        note_resp = client.get(f"/notes/{note['id']}", headers=recip_h)
-        assert note_resp.status_code == 200
-        assert note_resp.json()["my_is_confidential"] is True
-
 
 # ── List shares ───────────────────────────────────────────────────────────────
 

@@ -72,7 +72,6 @@ class SharedNote(Base):
     note_id = Column(Uuid(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
     recipient_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     can_edit = Column(Boolean, default=False)
-    is_confidential = Column(Boolean, default=False)
     # Placeholder for future asymmetric sharing: recipient-wrapped DEK.
     recipient_encrypted_dek = Column(Text, nullable=True)
     recipient_key_version = Column(String, nullable=True)

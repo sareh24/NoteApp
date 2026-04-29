@@ -61,17 +61,4 @@ function extractFingerprint(text) {
     return btoa(String.fromCharCode(...byteArr));
 }
 
-/**
- * Insert a small visible watermark (recipient's name) at the end of every
- * paragraph in an HTML string.
- *
- * @param {string} html          - Raw HTML string
- * @param {string} recipientName - Full name to embed (e.g. "Alice Smith")
- * @returns {string}             - HTML with watermark spans injected before every </p>
- */
-function addWatermark(html, recipientName) {
-    const mark = `<span style="color:#ccc;font-size:9px;font-style:italic;user-select:text;"> — ${recipientName}</span>`;
-    return html.replace(/<\/p>/gi, mark + '</p>');
-}
-
-module.exports = { FP_MARKER, embedFingerprint, extractFingerprint, addWatermark };
+module.exports = { FP_MARKER, embedFingerprint, extractFingerprint };
